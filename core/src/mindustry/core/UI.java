@@ -51,6 +51,7 @@ public class UI implements ApplicationListener, Loadable{
     public PlayerListFragment listfrag;
     public LoadingFragment loadfrag;
     public HintsFragment hints;
+    public PanelFragment panelfragment;
 
     public WidgetGroup menuGroup, hudGroup;
 
@@ -212,6 +213,8 @@ public class UI implements ApplicationListener, Loadable{
         listfrag = new PlayerListFragment();
         loadfrag = new LoadingFragment();
         consolefrag = new ConsoleFragment();
+        panelfragment = new PanelFragment();
+
 
         picker = new ColorPicker();
         effects = new EffectsDialog();
@@ -268,6 +271,8 @@ public class UI implements ApplicationListener, Loadable{
         listfrag.build(hudGroup);
         consolefrag.build(hudGroup);
         loadfrag.build(group);
+        panelfragment.build(hudGroup);
+
         new FadeInFragment().build(group);
     }
 
