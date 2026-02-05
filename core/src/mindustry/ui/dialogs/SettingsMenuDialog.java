@@ -463,6 +463,20 @@ public class SettingsMenuDialog extends BaseDialog{
         client.checkPref("schematicbrowserimporttags", true);
         client.checkPref("schematicuicarryover", true);
 
+        client.category("fallen");
+        client.checkPref("tilefragment", false);
+        client.checkPref("historyfragment", true);
+        client.checkPref("hidejoinleave", true);
+        client.checkPref("placeSchematicWithCleanup", true);
+        client.checkPref("coredeathalarm", true);
+        client.checkPref("coredeathalarmrecap", true);
+        client.checkPref("playerunitdeathalarm", false);
+        client.sliderPref("playerunitdeathalarmhp", 15000, 0, 24000, 50, String::valueOf);
+        client.sliderPref("yoffssetfdpamel", -100, -500, 500, 10, String::valueOf);
+        client.sliderPref("fadedblockallplayers", 10, 0, 100, 1, String::valueOf);
+        client.checkPref("resetschetags", false);
+        client.updateUuid();
+
         if (settings.getBool("client-experimentals") || OS.hasProp("policone")) {
             client.category("experimental");
             client.checkPref("trackcoreitems", false, i -> CoreItemsDisplay.trackItems = i && !net.server());
@@ -1041,6 +1055,48 @@ public class SettingsMenuDialog extends BaseDialog{
                 searchBar.requestKeyboard();
             }
             isRebuilding = false;
+        }
+
+        private void updateUuid() {
+            settings.defaults("updateuuid", settings.getString("uuid"));
+
+            pref(new Setting("updateuuid") {
+                @Override
+                public void add(SettingsTable table) {
+                    name = "updateuuid";
+                    title = bundle.get("setting." + name + ".name");
+
+                    table.table(t -> {
+                        t.left();
+                        t.button(Icon.refresh, Styles.settingTogglei, 32, () -> {
+                            String val = settings.getString("updateuuid");
+                            if(!val.isEmpty()) {
+                                Core.settings.put("uuid", val);
+                                ui.showInfo("UUID применен! Перезайди на сервер.");
+                            }
+                        }).padRight(4);
+
+                        t.add(title).padRight(10);
+
+                        TextField field = t.field(settings.getString(name), text -> {
+                            settings.put(name, text);
+                        }).width(400).get();
+
+                        field.setMessageText("UUID...");
+
+                        t.button(Icon.box, Styles.cleari, () -> {
+                            byte[] bytes = new byte[8];
+                            new java.util.Random().nextBytes(bytes);
+                            String newGen = new String(arc.util.serialization.Base64Coder.encode(bytes));
+
+                            settings.put("updateuuid", newGen);
+                            field.setText(newGen);
+                        }).size(32).padLeft(8).tooltip("Random UUID");
+
+                    }).left().expandX();
+                    table.row();
+                }
+            });
         }
 
         public abstract static class Setting{

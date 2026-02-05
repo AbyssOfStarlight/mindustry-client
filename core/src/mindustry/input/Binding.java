@@ -128,7 +128,12 @@ public class Binding{
     toggleAutoTarget = KeyBind.add("toggle_auto_target", KeyCode.x),
     showMassdriverConfigs = KeyBind.add("show_massdriver_configs", KeyCode.f3),
     forcePlaceModifier = KeyBind.add("force_place_modifier", KeyCode.altLeft),
-    runJS = KeyBind.add("run_js", KeyCode.u)
+    runJS = KeyBind.add("run_js", KeyCode.u),
+    block_show_plans = KeyBind.add("block_show_plans", KeyCode.plus, "fallen"),
+    death_show_plans = KeyBind.add("death_show_plans", KeyCode.asterisk, "fallen"),
+    select_combat_units = KeyBind.add("select_combat_units", KeyCode.j, "fallen"),
+    select_last_units = KeyBind.add("select_last_units", KeyCode.r, "fallen")
+
     ;
 
     //dummy static class initializer

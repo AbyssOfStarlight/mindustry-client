@@ -84,11 +84,12 @@ public class PlayerListFragment{
 
         float h = 74f;
         float bs = h / 2;
-        float width = 750f + (Server.current.freeze.canRun() ? 20f : 0) + (Server.current.mute.canRun() ? 20f : 0);
+        float width = 750f + (Server.current.freeze.canRun() ? 20f : 0) + (Server.current.mute.canRun() ? 20f : 0) + (Core.settings.getBool("blocksplayersplan") ? 200f : 0);
         boolean found = false;
 
         players.clear();
         Groups.player.copy(players);
+        mindustry.client.ui.PlayerBlockListFragment.calculateStats();
 
         var target = Spectate.INSTANCE.getPos() instanceof Player p ? p :
             Navigation.currentlyFollowing instanceof AssistPath p && p.getAssisting() != null ? p.getAssisting() :
@@ -120,6 +121,34 @@ public class PlayerListFragment{
             };
             table.margin(8);
             table.add(new Image(user.icon()).setScaling(Scaling.bounded)).grow();
+            if (Core.settings.getBool("blocksplayersplan")) {
+                String cleanUserName = Strings.stripColors(user.name());
+                int built = mindustry.client.ui.PlayerBlockListFragment.builtCache.get(cleanUserName, 0);
+                int broken = mindustry.client.ui.PlayerBlockListFragment.breakCache.get(cleanUserName, 0);
+                int config = mindustry.client.ui.PlayerBlockListFragment.configCache.get(cleanUserName, 0);
+
+                button.table(stats -> {
+                    stats.button("[green]+" + built, () -> mindustry.client.ui.PlayerBlockListFragment.name_for_plans = user.name)
+                            .height(30).minWidth(50).pad(2).tooltip("Построено");
+
+                    stats.button("[red]-" + broken, () -> mindustry.client.ui.PlayerBlockListFragment.name_for_plans = user.name)
+                            .height(30).minWidth(50).pad(2).tooltip("Сломано");
+
+                    stats.button("[blue]~" + config, () -> mindustry.client.ui.PlayerBlockListFragment.name_for_plans = user.name)
+                            .height(30).minWidth(50).pad(2).tooltip("Потрогано");
+
+                    stats.button(Icon.hammer, Styles.clearNonei, () -> {
+                        String targetName = Strings.stripColors(user.name());
+                        mindustry.client.ui.PlayerBlockListFragment.deletePlayerBuild(targetName);
+                    }).tooltip("Восстановить всё, что сломал этот инвалид");
+
+                    stats.button(Icon.trash, Styles.clearNonei, () -> {
+                        String targetName = Strings.stripColors(user.name());
+                        mindustry.client.ui.PlayerBlockListFragment.repairPlayerBuild(targetName);
+                    }).tooltip("Снести всё, что построил этот инвалид");
+
+                });
+            }
             table.name = user.name();
 
             button.add(table).size(h);

@@ -235,9 +235,24 @@ public class HudFragment{
             t.visible(() -> shown && Core.settings.getBool(("minimap"))); // FINISHME: Only hide minimap when doing so, use a collapser to shrink it maybe? Idk
             t.name = "minimap/position";
             //tile hud
-            t.add(new TileInfoFragment()).name("tilehud").top();
+            //t.add(new TileInfoFragment()).name("tilehud").top();
             //minimap
-            t.add(new Minimap()).name("minimap").top();
+            //t.add(new Minimap()).name("minimap").top();
+            t.table(ta -> {
+                if(Core.settings.getBool("historyfragment")) {
+                    ta.add(new HistoryInfoFragment()).name("log").top().right().maxWidth(500f);
+                }
+                else{
+                    if(Core.settings.getBool("tilefragment")) {
+                        ta.add(new TileInfoFragment()).name("tilehud").top();
+                    }
+                }
+                ta.add(new Minimap()).name("minimap").top();
+            });
+            if(Core.settings.getBool("historyfragment")) {
+                t.row();
+                t.add(new TileInfoFragment()).name("tilehud").top().right();
+            }
             t.row();
             //position
             t.label(() -> player.tileX() + ", " + player.tileY() + "\n" + "[coral]" + World.toTile(Core.input.mouseWorldX()) + ", " + World.toTile(Core.input.mouseWorldY()))

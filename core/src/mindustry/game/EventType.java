@@ -705,6 +705,13 @@ public class EventType{
             this.unit = unit;
         }
     }
+
+    public static class UnitRealDeathEvent {
+        public final Unit unit;
+        public UnitRealDeathEvent(Unit unit){
+            this.unit = unit;
+        }
+    }
     /** Called when a unit is directly killed by a bullet. May not fire in all circumstances. */
     public static class UnitBulletDestroyEvent{
         public Unit unit;

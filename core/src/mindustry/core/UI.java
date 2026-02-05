@@ -52,6 +52,8 @@ public class UI implements ApplicationListener, Loadable{
     public LoadingFragment loadfrag;
     public HintsFragment hints;
     public PanelFragment panelfragment;
+    public PlayerBlockListFragment listblockfrag;
+    public HistoryFragment historyFrag;
 
     public WidgetGroup menuGroup, hudGroup;
 
@@ -214,6 +216,8 @@ public class UI implements ApplicationListener, Loadable{
         loadfrag = new LoadingFragment();
         consolefrag = new ConsoleFragment();
         panelfragment = new PanelFragment();
+        listblockfrag = new PlayerBlockListFragment();
+        historyFrag = new HistoryFragment();
 
 
         picker = new ColorPicker();
@@ -272,6 +276,11 @@ public class UI implements ApplicationListener, Loadable{
         consolefrag.build(hudGroup);
         loadfrag.build(group);
         panelfragment.build(hudGroup);
+        listblockfrag.build(hudGroup);
+        historyFrag.build(ui.hudGroup);
+
+
+        mindustry.client.fallen.ActivityLogger.init();
 
         new FadeInFragment().build(group);
     }
