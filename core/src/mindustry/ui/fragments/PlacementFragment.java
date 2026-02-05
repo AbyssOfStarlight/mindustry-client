@@ -33,7 +33,7 @@ import mindustry.world.meta.*;
 import static mindustry.Vars.*;
 
 public class PlacementFragment{
-    final int rowWidth = 4;
+    final int rowWidth = 10;
 
     public Category currentCategory = Category.distribution;
 
