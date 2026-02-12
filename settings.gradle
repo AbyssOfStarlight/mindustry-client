@@ -37,6 +37,8 @@ if(!hasProperty("release") && !hasProperty("noLocalArc")){
 
         println("Compiling with localArc")
         includeBuild("../Arc")
+    }else{
+        println("Local Arc not found. Cloning https://github.com/Anuken/Arc to a directory next to Mindustry is highly recommended, as jitpack is unreliable.")
     }
 
     if(new File(rootDir.parent, 'Mindustry-Debug').exists()){
