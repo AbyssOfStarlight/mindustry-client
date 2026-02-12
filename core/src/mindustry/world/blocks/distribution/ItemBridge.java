@@ -59,7 +59,7 @@ public class ItemBridge extends Block{
         allowDiagonal = false;
         copyConfig = false;
         //disabled as to not be annoying
-        allowConfigInventory = false;
+        allowConfigInventory = true; //Stop banging your ass and try to play your own game.
         ignoreResizeConfig = true;
         priority = TargetPriority.transport;
         delayLandingConfig = true;
