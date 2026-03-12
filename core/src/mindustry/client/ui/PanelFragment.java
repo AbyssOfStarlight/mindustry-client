@@ -17,6 +17,7 @@ import arc.util.CommandHandler;
 import arc.util.pooling.Pools;
 import mindustry.*;
 import mindustry.client.ClientVars;
+import mindustry.client.fallen.FDAutoShoot;
 import mindustry.client.navigation.BuildPath;
 import mindustry.client.navigation.MinePath;
 import mindustry.client.navigation.Navigation;
@@ -110,6 +111,7 @@ public class PanelFragment extends Table{
                     if(player.unit().plans.size != 0 && control.input.isBuilding ) {prevfollowmode = 3; currentfollowmode = 3; Navigation.follow(new BuildPath("self")); } else return;
                 }
             }
+            FDAutoShoot.update();
         });
     }
 
@@ -419,9 +421,8 @@ public class PanelFragment extends Table{
                 }).update(i -> i.setChecked(Core.settings.getBool("afkmode"))).name("AFK").tooltip("AFK");
 
                 t.button(Icon.starSmall, sstylet, () -> {
-                    Core.settings.put("autotarget", !Core.settings.getBool("autotarget"));
-                    new Toast(1).add(bundle.get("setting.autotarget.name") + ": " + bundle.get((settings.getBool("autotarget") ? "mod.enabled" : "mod.disabled")));
-                }).update(i -> i.setChecked(Core.settings.getBool("autotarget"))).name("autotarget").tooltip("autotarget");
+                    settings.put("smarttargeting", !settings.getBool("smarttargeting"));
+                }).update(i -> i.setChecked(settings.getBool("smarttargeting"))).name("smarttargeting").tooltip("smarttargeting");
 
                 t.button(Icon.cancelSmall, sstylet, () -> {
                     Core.settings.put("ignoreunit", !Core.settings.getBool("ignoreunit"));
@@ -436,6 +437,9 @@ public class PanelFragment extends Table{
                     new Toast(1).add(bundle.get("client.autotransfer") + ": " + bundle.get(AutoTransfer.enabled ? "mod.enabled" : "mod.disabled"));
                     Core.settings.put("autotransfer", !Core.settings.getBool("autotransfer"));
                 }).update(i -> i.setChecked(Core.settings.getBool("autotransfer"))).name("autotransfer").tooltip("autotransfer");
+                t.button(Icon.lineSmall, sstylet, () -> {
+                    FDAutoShoot.viewUnitAim = !FDAutoShoot.viewUnitAim;
+                }).update(i -> i.setChecked(FDAutoShoot.viewUnitAim)).name("vaim").tooltip("Player Unit Range & Real Aim");
 
                 t.row();
                 t.button(Icon.trelloSmall, sstylet, () -> {
