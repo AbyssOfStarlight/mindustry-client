@@ -508,7 +508,12 @@ public class DesktopInput extends InputHandler{
         }
 
         if (input.keyDown(Binding.findModifier) && input.keyRelease(Binding.find)) {
-            FindDialog.INSTANCE.show();
+            if(input.keyDown(Binding.boost)){
+                if (ui.logicSearchFrag != null) ui.logicSearchFrag.toggle();
+            }
+            else{
+                FindDialog.INSTANCE.show();
+            }
         }
 
         if(!locked){
