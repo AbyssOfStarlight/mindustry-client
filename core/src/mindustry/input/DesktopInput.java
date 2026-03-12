@@ -906,6 +906,9 @@ public class DesktopInput extends InputHandler{
             if (state.isCampaign() && !Vars.net.client()) ui.planet.show();
             else MarkerDialog.INSTANCE.show();
         }).tooltip(t -> t.background(Styles.black6).margin(4f).label(() -> state.isCampaign() ? "@planetmap" : "Map Markers"));
+        table.button(Icon.waves, Styles.clearNonei, () -> {
+            ui.waveInfoFrag.toggle();
+        }).tooltip("@mapsettings");
 
         table.button(Icon.tree, Styles.clearNonei, () -> {
             ui.research.show();

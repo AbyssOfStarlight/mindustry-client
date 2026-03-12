@@ -54,6 +54,7 @@ public class UI implements ApplicationListener, Loadable{
     public PanelFragment panelfragment;
     public PlayerBlockListFragment listblockfrag;
     public HistoryFragment historyFrag;
+    public WaveInfoFrag waveInfoFrag;
 
     public WidgetGroup menuGroup, hudGroup;
 
@@ -218,6 +219,7 @@ public class UI implements ApplicationListener, Loadable{
         panelfragment = new PanelFragment();
         listblockfrag = new PlayerBlockListFragment();
         historyFrag = new HistoryFragment();
+        waveInfoFrag = new WaveInfoFrag();
 
 
         picker = new ColorPicker();
@@ -278,6 +280,7 @@ public class UI implements ApplicationListener, Loadable{
         panelfragment.build(hudGroup);
         listblockfrag.build(hudGroup);
         historyFrag.build(ui.hudGroup);
+        waveInfoFrag.build(ui.hudGroup);
 
 
         mindustry.client.fallen.ActivityLogger.init();
