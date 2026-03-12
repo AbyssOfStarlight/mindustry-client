@@ -131,7 +131,7 @@ public class Binding{
     runJS = KeyBind.add("run_js", KeyCode.u),
     block_show_plans = KeyBind.add("block_show_plans", KeyCode.plus, "fallen"),
     death_show_plans = KeyBind.add("death_show_plans", KeyCode.asterisk, "fallen"),
-    select_combat_units = KeyBind.add("select_combat_units", KeyCode.j, "fallen"),
+    deselect_half_units = KeyBind.add("deselect_half_units", KeyCode.j, "fallen"),
     select_last_units = KeyBind.add("select_last_units", KeyCode.r, "fallen")
 
     ;

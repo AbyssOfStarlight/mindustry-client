@@ -877,6 +877,25 @@ public class DesktopInput extends InputHandler{
                 changedCursor = false;
             }
         }
+
+        if(Core.input.keyTap(Binding.deselect_half_units) && scene.getKeyboardFocus() == null){
+            if(selectedUnits.size > 1){
+                ObjectMap<UnitType, Seq<Unit>> groups = new ObjectMap<>();
+                for(Unit unit : selectedUnits){
+                    if(!groups.containsKey(unit.type)) groups.put(unit.type, new Seq<>());
+                    groups.get(unit.type).add(unit);
+                }
+                selectedUnits.clear();
+                for(var entry : groups.entries()){
+                    Seq<Unit> typeSeq = entry.value;
+                    int keepCount = Math.max(1, typeSeq.size / 2);
+                    for(int i = 0; i < keepCount; i++){
+                        selectedUnits.add(typeSeq.get(i));
+                    }
+                }
+                Events.fire(Trigger.unitCommandChange);
+            }
+        }
     }
 
     @Override
