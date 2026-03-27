@@ -139,27 +139,17 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
     private Seq<BuildPlan> plansOut = new Seq<>(BuildPlan.class);
     public QuadTree<BuildPlan> playerPlanTree = new QuadTree<>(new Rect());
+    public QuadTree<BuildPlan> selectPlanTree = new QuadTree<>(new Rect());
 
     public final BlockInventoryFragment inv;
     public final BlockConfigFragment config;
     public final PlanConfigFragment planConfig;
 
     private WidgetGroup group = new WidgetGroup();
+    private BuildPlan overlappingPlan = null;
+    private Player overlappingPlayer = null;
 
-    private Seq<BuildPlan> visiblePlanSeq = new Seq<>();
-    private long lastFrameId;
-    private final Eachable<BuildPlan> allPlans = cons -> {
-        if(!player.dead()){
-            player.unit().plans().each(cons);
-        }
-        selectPlans.each(cons);
-        linePlans.each(cons);
-    };
-
-    private final Eachable<BuildPlan> allSelectLines = cons -> {
-        selectPlans.each(cons);
-        linePlans.each(cons);
-    };
+    protected Eachable<BuildPlan> allPlans, allSelectLines, allRenderPlansConfig;
 
     // These 3 vars and init block are used for retrying configs that the server has denied due to exceeding the ratelimit
     private static boolean fromServer;
@@ -180,6 +170,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         config = new BlockConfigFragment();
         planConfig = new PlanConfigFragment();
 
+        createPlanLists();
+
         Events.on(UnitDestroyEvent.class, e -> {
             if(e.unit != null && e.unit.isPlayer() && e.unit.getPlayer().isLocal() && e.unit.type.weapons.contains(w -> w.bullet.killShooter)){
                 player.shooting = false;
@@ -188,6 +180,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
         Events.on(WorldLoadEvent.class, e -> {
             playerPlanTree = new QuadTree<>(new Rect(0f, 0f, world.unitWidth(), world.unitHeight()));
+            selectPlanTree = new QuadTree<>(new Rect(0f, 0f, world.unitWidth(), world.unitHeight()));
+            createPlanLists();
         });
 
         Events.on(ResetEvent.class, e -> {
@@ -319,6 +313,25 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                     continue outer;
                 }
             }
+        }
+    }
+
+    @Remote(called = Loc.server, targets = Loc.both, forward = true)
+    public static void pingLocation(Player player, float x, float y, @Nullable String text){
+        if(player != null && Vars.player != null && player.team() == Vars.player.team()){
+            if(net.server() && !netServer.admins.allowAction(player, ActionType.pingLocation, event -> {
+                event.pingX = x;
+                event.pingY = y;
+                event.pingText = text;
+            })){
+                throw new ValidateException(player, "Player was not allowed to ping a location.");
+            }
+
+            player.pingX = x;
+            player.pingY = y;
+            player.pingTime = 1f;
+            player.pingText = text == null || text.isEmpty() ? null :
+                ((text.length() > maxPingTextLength ? text.substring(0, maxPingTextLength) + "..." : text));
         }
     }
 
@@ -779,7 +792,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         Events.fire(new ConfigEventBefore(build, player, value));
         if(player != null) build.updateLastAccess(player);
         build.configured(player == null || player.dead() ? null : player.unit(), value);
-        Core.app.post(() -> Events.fire(new ConfigEvent(build, player, value, previous)));
+        Events.fire(new ConfigEvent(build, player, value, previous));
     }
 
     //only useful for servers or local mods, and is not replicated across clients
@@ -927,6 +940,27 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         player.deathTimer = Player.deathDelay + 1f; //for instant respawn
     }
 
+    protected void createPlanLists(){
+        allPlans = new QueryEachable(playerPlanTree, linePlans){
+            @Override
+            public BuildPlan find(int x, int y, int size, Boolf<BuildPlan> check){
+                BuildPlan plan = super.find(x, y, size, check);
+                if(plan != null) return plan;
+
+                return selectPlanTree.find(x * tilesize - tilesize/2f * size, y * tilesize - tilesize/2f * size, size * tilesize, size * tilesize, check);
+            }
+        };
+        allSelectLines = new QueryEachable(null, selectPlans, linePlans);
+        allRenderPlansConfig = new QueryEachable(playerPlanTree, selectPlans);
+    }
+
+    public void updateSelectQuadtree(){
+        selectPlanTree.clear();
+        for(var plan : selectPlans){
+            selectPlanTree.insert(plan);
+        }
+    }
+
     /** Adds an input lock; if this function returns true, input is locked. Used for mod 'cutscenes' or custom camera panning. */
     public void addLock(Boolp lock){
         inputLocks.add(lock);
@@ -960,6 +994,14 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         lastPlans.clear();
         queued.clear(51);
         player.shooting = false;
+    }
+
+    public void getSyncedPlans(Seq<BuildPlan> out){
+        for(var plan : lastPlans){
+            if(!plan.breaking){
+                out.add(plan);
+            }
+        }
     }
 
     public void update(){
@@ -1408,6 +1450,106 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
             if(sel != null && !(!multiUnitSelect() && selectedUnits.size == 1 && selectedUnits.contains(sel))){
                 drawCommand(sel);
+            }
+        }
+    }
+
+    //prevents allocation
+    private static BuildPlan sameQuadPlan;
+    private static final Boolf<BuildPlan> sameQuadPlanFinder = b -> b.block == sameQuadPlan.block && b.x == sameQuadPlan.x && b.y == sameQuadPlan.y;
+
+    /** Draws build plans of other players. */
+    public void drawOtherBuildPlans(){
+        Tmp.v3.set(input.mouseWorld());
+        overlappingPlan = null;
+        overlappingPlayer = null;
+
+        Groups.player.each(player -> {
+            var plans = player.getPreviewPlans();
+            if(player == Vars.player || player.team() != Vars.player.team()){
+                plans.clear(); //don't keep irrelevant plans around
+                return;
+            }
+
+            if(player.previewPlanTree == null){
+                player.previewPlanTree = new QuadTree<>(playerPlanTree.bounds);
+                player.planEachable = new QueryEachable(player.previewPlanTree);
+            }
+
+            if(player.previewPlansDirty){
+                player.previewPlansDirty = false;
+                //retain animation state
+                for(BuildPlan plan : plans){
+                    sameQuadPlan = plan;
+                    BuildPlan prev = player.previewPlanTree.find(plan.drawx(), plan.drawy(), 1f, 1f, sameQuadPlanFinder);
+                    if(prev != null){
+                        plan.animScale = prev.animScale;
+                    }
+                }
+                player.previewPlanTree.clear();
+                for(BuildPlan plan : plans){
+                    player.previewPlanTree.insert(plan);
+                }
+            }
+
+            BuildPlan current = player.isBuilder() ? player.unit().buildPlan() : null;
+            camera.bounds(Tmp.r1);
+
+            player.previewPlanTree.intersect(Tmp.r1.grow(tilesize * 2f), plan -> {
+                if(plan.block == null || plan.isDone() || (current != null && player.x == current.x && player.y == current.y && player.unit().activelyBuilding())) return;
+
+                if(Tmp.r2.setCentered(plan.drawx(), plan.drawy(), plan.block.size * tilesize).contains(Tmp.v3)){
+                    overlappingPlan = plan;
+                    overlappingPlayer= player;
+                }
+
+                plan.animScale = Mathf.lerpDelta(plan.animScale, 1f, 0.2f * Time.delta);
+                plan.block.drawOtherPlayerPlan(plan, player.planEachable, overlappingPlan == plan ? 0.7f : 0.25f);
+            });
+        });
+
+        if(overlappingPlan != null){
+            Drawf.arrow(overlappingPlan.drawx(), overlappingPlan.drawy(), overlappingPlayer.x, overlappingPlayer.y, overlappingPlan.block.size * tilesize * 0.6f + tilesize/2f, 2f, overlappingPlayer.color);
+            Drawf.selected(overlappingPlan.x, overlappingPlan.y, overlappingPlan.block, overlappingPlayer.color);
+            overlappingPlan.block.drawPlaceText(overlappingPlayer.name, overlappingPlan.x, overlappingPlan.y, overlappingPlayer.color, false);
+        }
+    }
+
+    public void drawBuildPlans(){
+//        if(!player.isBuilder()) return;
+
+        Unit u = player.unit();
+        BuildPlan current = u == null ? null : u.buildPlan();
+
+        camera.bounds(Tmp.r1);
+        plansOut.clear();
+        playerPlanTree.intersect(Tmp.r1, plansOut);
+
+        for(BuildPlan plan : plansOut){
+            if(plan.progress > 0.01f || (current == plan && plan.initialized && (u.within(plan.x * tilesize, plan.y * tilesize, u.type.buildRange) || state.isEditor()))) continue;
+
+            plan.animScale = 1f;
+            if(plan.breaking){
+                drawBreaking(plan);
+            }else{
+                plan.block.drawPlan(plan, allPlans, Build.validPlace(plan.block, player.team(), plan.x, plan.y, plan.rotation) || planMatches(plan), 1f);
+            }
+        }
+
+        camera.bounds(Tmp.r3);
+
+        Draw.reset();
+
+        //TODO: cannot query for links that are offscreen
+        if (u != null) {
+            for(BuildPlan plan : u.plans){
+                if(plan.progress > 0.01f || plan.breaking || (current == plan && plan.initialized && (u.within(plan.x * tilesize, plan.y * tilesize, u.type.buildRange) || state.isEditor()))) continue;
+
+                if(Tmp.r2.setCentered(plan.drawx(), plan.drawy(), plan.block.planConfigClipSize()).overlaps(Tmp.r3)){
+                    Draw.mixcol(Color.white, 0.24f + Mathf.absin(Time.globalTime, 6f, 0.28f));
+                    plan.block.drawPlanConfigTop(plan, allRenderPlansConfig);
+                    Draw.reset();
+                }
             }
         }
     }
@@ -1881,6 +2023,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             var plan = temp[i];
             if (freeze) frozenPlans.add(plan);
             else player.unit().addBuild(plan);
+            playerPlanTree.insert(plan);
         }
     }
 
@@ -1893,17 +2036,10 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     }
 
     protected void drawOverPlan(BuildPlan plan, boolean valid, float alpha){
-        if(!plan.isVisible()) return;
         Draw.reset();
-        final long frameId = graphics.getFrameId();
-        if(lastFrameId != frameId){
-            lastFrameId = frameId;
-            visiblePlanSeq.clear();
-            BuildPlan.getVisiblePlans(allSelectLines, visiblePlanSeq);
-        }
         Draw.mixcol(!valid ? Pal.breakInvalid : Color.white, (!valid ? 0.4f : 0.24f) + Mathf.absin(Time.globalTime, 6f, 0.28f));
         Draw.alpha(alpha);
-        plan.block.drawPlanConfigTop(plan, visiblePlanSeq);
+        plan.block.drawPlanConfigTop(plan, allSelectLines);
         Draw.reset();
     }
 
@@ -1916,7 +2052,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     }
 
     protected void drawPlan(BuildPlan plan, boolean valid, float alpha){
-        plan.block.drawPlan(plan, allPlans(), valid, alpha, false);
+        plan.block.drawPlan(plan, allPlans, valid, alpha, false);
     }
 
     /** Draws a placement icon for a specific block. */
@@ -1926,7 +2062,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             bplan.config = block.lastConfig;
         }
         bplan.animScale = 1f;
-        block.drawPlan(bplan, allPlans(), validPlace(x, y, block, rotation));
+        block.drawPlan(bplan, allPlans, validPlace(x, y, block, rotation));
     }
 
     /** Remove everything from the queue in a selection. */
@@ -2198,7 +2334,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                 (Vars.player != null && Vars.player.unit() instanceof BlockUnitUnit blockunit && Structs.contains(noInteractTurrets, blockunit.tile().block.name))
                 && Core.settings.getBool("betterenemyblocktapping", false)
             )
-        ) && build.block.synthetic() && (!consumed || invBuild.block.allowConfigInventory)){
+        ) && build.block.synthetic() /*&& (!consumed || invBuild.block.allowConfigInventory)*/){ //Foos: always allow showing the inventory and config
             if(invBuild.block.hasItems && invBuild.items.total() > 0){
                 inv.showFor(invBuild);
                 consumed = true;
@@ -2583,7 +2719,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             ? !Build.validPlaceIgnoreUnits(type, player.team(), x, y, rotation, true, true)
             : !Build.validPlace(type, player.team(), x, y, rotation, true)) return false;
 
-        if(player.unit().plans.size > 0){
+        if(!player.dead() && player.unit().plans.size > 0){
             Tmp.r1.setCentered(x * tilesize + type.offset, y * tilesize + type.offset, type.size * tilesize);
             plansOut.clear();
             playerPlanTree.intersect(Tmp.r1, plansOut);
@@ -2772,6 +2908,46 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         public int x, y, rotation;
         public boolean last;
     }
+
+    /**
+     * In the interest of preserving compatibility, this implementation replaces Eachable with its own methods, and requires blocks to cast it to use it properly.
+     * It's a massive hack.
+     * */
+    public static class QueryEachable implements Eachable<BuildPlan>{
+        final QuadTree<BuildPlan> tree;
+        final Seq[] fallback;
+
+        public QueryEachable(QuadTree<BuildPlan> tree, Seq<BuildPlan>... fallback){
+            this.tree = tree;
+            this.fallback = fallback;
+        }
+
+        @Override
+        public void each(Cons<? super BuildPlan> cons){
+            //you're not supposed to use this method anymore
+        }
+
+        public BuildPlan find(int x, int y, Boolf<BuildPlan> check){
+            return find(x, y, 1, check);
+        }
+
+        public BuildPlan find(int x, int y, int size, Boolf<BuildPlan> check){
+            if(tree != null){
+                BuildPlan plan = tree.find(x * tilesize - tilesize/2f * size, y * tilesize - tilesize/2f * size, size * tilesize, size * tilesize, check);
+                if(plan != null){
+                    return plan;
+                }
+            }
+            for(var fallback : fallback){
+                var result = fallback.find(check);
+                if(result != null){
+                    return (BuildPlan)result;
+                }
+            }
+            return null;
+        }
+    }
+
     public static void selectUnitsType(UnitType seltype) {
         selectedUnits.clear();
         commandBuildings.clear();

@@ -6,6 +6,7 @@ package mindustry.client.utils
 import arc.*
 import arc.files.*
 import arc.graphics.*
+import arc.input.*
 import arc.math.*
 import arc.math.geom.*
 import arc.scene.*
@@ -261,7 +262,7 @@ fun pixmapFromClipboard(): Pixmap? {
         val clipboard = tkClass.getMethod("getSystemClipboard").invoke(tk)
         val clipboardClass = Class.forName("java.awt.datatransfer.Clipboard")
 
-        val content = clipboardClass.getMethod("getContents", java.lang.Object::class.java)
+        val content = clipboardClass.getMethod("getContents", Object::class.java)
             .invoke(clipboard, null)
 
         val flavorClass = Class.forName("java.awt.datatransfer.DataFlavor")
@@ -317,7 +318,7 @@ fun compressImage(img: Pixmap): ByteArray {
         bytes.reset()
         val memCacheOutCls = Class.forName("javax.imageio.stream.MemoryCacheImageOutputStream")
         val out = memCacheOutCls.getConstructor(OutputStream::class.java).newInstance(bytes)
-        writerCls.getMethod("setOutput", java.lang.Object::class.java).invoke(writer, out)
+        writerCls.getMethod("setOutput", Object::class.java).invoke(writer, out)
 
         val bufImCls = Class.forName("java.awt.image.BufferedImage")
         val im = bufImCls.getConstructor(Int::class.java, Int::class.java, Int::class.java)
@@ -408,7 +409,7 @@ inline fun circle(x: Int, y: Int, radius: Float, cons: (Tile?) -> Unit) {
 }
 
 /** Send a signed message to chat. */
-fun sendMessage(msg: String) = Call.sendChatMessage(Main.sign(msg))
+fun sendMessage(msg: String) = Call.sendChatMessage(Main.sign(msg).also { checkPing(it) })
 
 fun getName(builder:mindustry.gen.Unit?):String {
     return if(builder == null){
@@ -517,6 +518,14 @@ fun openJar(vararg extraArgs: String) {
     }
 }
 
+fun ctrlKeyTap() = if (OS.isMac) Core.input.keyTap(KeyCode.sym) else Core.input.keyTap(KeyCode.controlLeft) || Core.input.keyTap(KeyCode.controlRight)
+
+fun ctrlKeyRelease() = if (OS.isMac) Core.input.keyRelease(KeyCode.sym) else Core.input.keyRelease(KeyCode.controlLeft) || Core.input.keyRelease(KeyCode.controlRight)
+
+fun shiftKeyTap() = Core.input.keyTap(KeyCode.shiftLeft) || Core.input.keyTap(KeyCode.shiftRight)
+
+fun shiftKeyRelease() = Core.input.keyRelease(KeyCode.shiftLeft) || Core.input.keyRelease(KeyCode.shiftRight)
+
 @Suppress("NAME_SHADOWING")
 @JvmOverloads
 fun biasedLevenshtein(x: String, y: String, caseSensitive: Boolean = false, lengthIndependent: Boolean = false): Float {
@@ -556,6 +565,8 @@ fun biasedLevenshtein(x: String, y: String, caseSensitive: Boolean = false, leng
 // FINISHME: This should be merged with the function above
 @Suppress("NAME_SHADOWING")
 private fun biasedLevenshteinLengthIndependent(x: String, y: String): Float {
+    if (x == y) return 0f
+    if (x.endsWith(y)) return 0.2f
     var x = x
     var y = y
     if (x.length > y.length) x = y.apply { y = x } // Y will be the longer of the two
@@ -583,7 +594,7 @@ private fun biasedLevenshteinLengthIndependent(x: String, y: String): Float {
     }
 
     // startsWith
-    if (dp[curr + xl] == 0) return 0f
+    if (dp[curr + xl] == 0) return 0.1f
     // Disregard insertions at the end - if it made it it made it
     var output = xl
     for (i in curr until curr + yl) {

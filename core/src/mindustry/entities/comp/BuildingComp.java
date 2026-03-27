@@ -628,7 +628,7 @@ abstract class BuildingComp implements Posc, Teamc, Healthc, Buildingc, Timerc, 
             return BlockStatus.noInput;
         }
 
-        return ((state.tick / 30f) % 1f) < efficiency ? BlockStatus.active : BlockStatus.noInput;
+        return ((state.tick / 30f) % 1f) * this.efficiencyScale() < efficiency ? BlockStatus.active : BlockStatus.noInput;
     }
 
     /** Call when nothing is happening to the entity. This increments the internal sleep timer. */
@@ -1341,6 +1341,9 @@ abstract class BuildingComp implements Posc, Teamc, Healthc, Buildingc, Timerc, 
     @CallSuper
     public void onRepaired(){
         placed();
+        if(block.flags.contains(BlockFlag.hasFogRadius)){
+            fogControl.forceUpdate(team, self());
+        }
     }
 
     public boolean isCommandable(){

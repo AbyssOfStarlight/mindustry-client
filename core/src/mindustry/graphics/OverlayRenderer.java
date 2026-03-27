@@ -78,22 +78,27 @@ public class OverlayRenderer{
     }
 
     public void drawBottom(){
-        if(ClientVars.hidingPlans || player.dead()) return;
+        if(ClientVars.hidingPlans /*|| player.dead()*/) return;
 
-//        if (player.isBuilder()) player.unit().drawBuildPlans();
-        player.unit().drawBuildPlans();
+        InputHandler input = control.input;
+
+        if(renderer.showOtherBuildPlans){
+            input.drawOtherBuildPlans();
+        }
+
         drawFrozenPlans();
+//        if(player.isBuilder()){
+            input.drawBuildPlans();
+//        }
 
-//        InputHandler input = control.input;
-//        input.drawBottom();
-        control.input.drawBottom();
+        input.drawBottom();
     }
 
     public void drawFrozenPlans(){
         // move frozenPlans.size == 0 out from skip
         if(frozenPlans.size == 0) return;
 
-        // see player.unit().drawBuildPlans();
+        // see input.drawBuildPlans();
         var team = player.team();
         var plantopAlpha = 0.24F + Mathf.absin(Time.globalTime, 6.0F, 0.28F);
         Boolf<BuildPlan> skip = plan ->/*plan.progress > 0.01F ||*/ frozenPlans.first() == plan && plan.initialized && (player.unit().within(plan.x * tilesize, plan.y * tilesize, buildingRange) || state.isEditor());

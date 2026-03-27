@@ -17,6 +17,7 @@ import mindustry.*;
 import mindustry.client.*;
 import mindustry.client.ui.*;
 import mindustry.client.utils.*;
+import mindustry.core.*;
 import mindustry.game.*;
 import mindustry.game.EventType.*;
 import mindustry.gen.*;
@@ -46,6 +47,8 @@ public class ChatFragment extends Table{
     private Seq<String> history = new Seq<>();
     private int historyPos = 0;
     private int scrollPos = 0;
+    private boolean lastFrameHadFocus;
+
     public Seq<Autocompleteable> completion = new Seq<>(); // FINISHME: The autocompletion system is awful.
     private int completionPos = -1;
     private static final Color hoverColor = Color.sky.cpy().mul(0.5f);
@@ -66,8 +69,9 @@ public class ChatFragment extends Table{
         });
 
         update(() -> {
+            boolean hasOtherFocus = (scene.getKeyboardFocus() != null && !chatfield.hasKeyboard()) && !(ui.minimapfrag.shown() && !(scene.getKeyboardFocus() instanceof TextField));
 
-            if(input.keyTap(Binding.chat) && (scene.getKeyboardFocus() == chatfield || scene.getKeyboardFocus() == null || ui.minimapfrag.shown()) && !ui.consolefrag.shown()){
+            if(input.keyTap(Binding.chat) && !hasOtherFocus && !lastFrameHadFocus && !ui.consolefrag.shown()){
                 toggle();
             }
 
@@ -100,6 +104,8 @@ public class ChatFragment extends Table{
                 }
                 scrollPos = (int)Mathf.clamp(scrollPos + input.axis(Binding.chatScroll), 0, Math.max(0, messages.size - messagesShown));
             }
+
+            lastFrameHadFocus = hasOtherFocus;
         });
 
         history.insert(0, "");
@@ -406,9 +412,25 @@ public class ChatFragment extends Table{
         Draw.color();
     }
 
+    //ping format: "x,y [text]"
+    public static void checkPing(String message){
+        if (message.startsWith("/") || message.startsWith(ClientVars.clientCommandHandler.prefix)) return;
+        var coords = NetClient.findCoords(message, true);
+        if (coords.size == 0) return;
+        Log.debug("Found coords in message: @", message);
+        var msg = new StringBuilder(message);
+        for (int i = coords.size - 1; i >= 0; i--) {
+            var c = coords.get(i);
+            msg.delete(c.start, c.end);
+            if (c.start > 0 && msg.length() > c.start && msg.charAt(c.start-1) == ' ' && msg.charAt(c.start) == ' ') msg.deleteCharAt(c.start); // Coords in the middle with a space on either side: delete one of the spaces
+        }
+        var c = coords.first().pos;
+        Log.debug("Ping at @, @", c.x/8, c.y/8);
+        Call.pingLocation(player, c.x, c.y, msg.toString());
+    }
+
     private void sendMessage(){
         String message = chatfield.getText().trim();
-        // FINISHME: make it so you need to press enter twice to send a message starting with /e
         clearChatInput();
 
         //avoid sending prefix-empty messages
@@ -446,6 +468,8 @@ public class ChatFragment extends Table{
             }
         }
         message = messageBuild.toString();
+
+        checkPing(message);
 
         handleClientCommand(message);
     }

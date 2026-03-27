@@ -4,7 +4,7 @@ pluginManagement { // FINISHME: Move all the plugin versions and such here.
         google()
     }
     plugins {
-        id "org.jetbrains.kotlin.jvm" version "2.1.20"
+        id "org.jetbrains.kotlin.jvm" version "2.3.20"
     }
 }
 
@@ -16,10 +16,10 @@ include 'desktop', 'core', 'server', 'ios', 'annotations', 'tools', 'tests'
 
 def hasSdk = System.getenv("ANDROID_HOME") != null
 
+def localProperties = new Properties()
 if(new File(settingsDir, 'local.properties').exists()){
-	def properties = new Properties()
-	properties.load(new File(settingsDir, 'local.properties').newDataInputStream())
-	if(properties.containsKey("sdk.dir")) hasSdk = true
+    localProperties.load(new File(settingsDir, 'local.properties').newDataInputStream())
+	if(localProperties.containsKey("sdk.dir")) hasSdk = true
 }
 
 if(System.getenv("JITPACK") == "true") hasSdk = false
@@ -30,7 +30,11 @@ if(hasSdk){
     println("No Android SDK found. Skipping Android module.")
 }
 
-if(!hasProperty("release") && !hasProperty("noLocalArc")){
+if(hasProperty("localRhino") || localProperties.getOrDefault("localRhino", "false") == "true"){
+    includeBuild("../rhino")
+}
+
+if(!hasProperty("noLocalArc")){
     if(new File(rootDir.parent, 'Arc').exists()){
         // Make sure that A is capitalized on windows as this will break gradle with a cryptic error otherwise
         if (!rootDir.parentFile.list().contains("Arc")) throw new Exception("Local arc folder is lowercase. Please capitalize the A to use local arc.")

@@ -78,7 +78,7 @@ public class ConstructBlock extends Block{
             block.breakEffect.at(tile.drawx(), tile.drawy(), block.size, block.mapColor);
             if(shouldPlay()) block.breakSound.at(tile, block.breakPitchChange ? calcPitch(false) : 1f);
         }
-        Events.fire(new BlockBuildEndEvent(tile, builder, team, true, tile.build == null ? null : tile.build.config(), tile.block())); // FINISHME: This overrides the vanilla class; likely to cause issues w/ mods | Vanilla: Events.fire(new BlockBuildEndEvent(tile, builder, team, true, null));
+        Events.fire(new BlockBuildEndEvent(tile, builder, team, true, null));
         tile.remove();
     }
 
@@ -154,7 +154,7 @@ public class ConstructBlock extends Block{
 
         block.placeEnded(tile, builder, rotation, config);
 
-        Events.fire(new BlockBuildEndEvent(tile, builder, team, false, config, prevBlock)); // FINISHME: Yet another case of a changed vanilla event. Vanilla: Events.fire(new BlockBuildEndEvent(tile, builder, team, false, config));
+        Events.fire(new BlockBuildEndEvent(tile, builder, team, false, config));
     }
 
     static boolean shouldPlay(){
@@ -616,7 +616,6 @@ public class ConstructBlock extends Block{
             var warnBlock = warnBlocks.get(current);
             if (warnBlock == null) return;
 
-            lastBuilder.drawBuildPlans(); // Draw their build plans FINISHME: This is kind of dumb because it only draws while they are building one of these blocks rather than drawing whenever there is one in the queue
             int distance = distanceToGreaterCore();
 
             // Play warning sound (only played when no reactor has been built for 10s)
@@ -647,12 +646,12 @@ public class ConstructBlock extends Block{
             if (
                 lastProgress == 0 && Core.settings.getBool("removecorenukes")
                 && state.rules.reactorExplosions && current instanceof NuclearReactor
-                && !lastBuilder.isLocal() && distance <= 21
-            ) { // Automatically remove reactors within explosion radiusof core
+                && !lastBuilder.isLocal() && distance <= 21 && !CustomMode.flood.b() // FINISHME: Can we check if the builder is building the player's local plan easily?
+            ) { // Automatically remove reactors within explosion radius of core
                 Call.buildingControlSelect(player, closestCore());
-                Timer.schedule(() -> player.unit().plans.add( // FINISHME: Cleanup
-                        new BuildPlan(tile.x, tile.y)
-                ), net.client() ? netClient.getPing()/1000f+.3f : 0);
+                Timer.schedule(() -> { // FINISHME: Cleanup
+                    if (player.unit() != null) player.unit().plans.add(new BuildPlan(tile.x, tile.y));
+                }, net.client() ? netClient.getPing()/1000f+.3f : 0);
             }
             lastProgress = progress;
         }

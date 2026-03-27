@@ -1,12 +1,10 @@
 package mindustry.entities.comp;
 
 import arc.*;
-import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
 import arc.math.*;
 import arc.struct.Queue;
-import arc.struct.*;
 import arc.util.*;
 import mindustry.*;
 import mindustry.annotations.Annotations.*;
@@ -23,7 +21,6 @@ import mindustry.world.blocks.ConstructBlock.*;
 
 import java.util.*;
 
-import static arc.Core.*;
 import static mindustry.Vars.*;
 import static mindustry.world.Build.*;
 
@@ -232,34 +229,6 @@ abstract class BuilderComp implements Posc, Statusc, Teamc, Rotc{
         }
     }
 
-    private transient long lastFrame;
-    private transient float buildPlanAlpha = 1f;
-    private transient final Seq<BuildPlan> visiblePlans = new Seq<>(1);
-    private void getVisiblePlans(){
-        buildPlanAlpha = 0.24f + Mathf.absin(Time.globalTime, 6f, 0.28f);
-        lastFrame = graphics.getFrameId();
-        visiblePlans.clear();
-        BuildPlan.getVisiblePlans(plans, visiblePlans);
-    }
-    /** Draw all current build plans. Does not draw the beam effect, only the positions. */
-    void drawBuildPlans(){
-        if(lastFrame != graphics.getFrameId()) getVisiblePlans();
-        Boolf<BuildPlan> skip = plan -> plan.progress > 0.01f || (buildPlan() == plan && plan.initialized && (within(plan.x * tilesize, plan.y * tilesize, type.buildRange) || state.isEditor()));
-
-        for(int i = 0; i < 2; i++){
-            for(BuildPlan plan : visiblePlans){
-                if(skip.get(plan)) continue;
-                if(i == 0){
-                    drawPlan(plan, 1f);
-                }else{
-                    drawPlanTop(plan, 1f);
-                }
-            }
-        }
-
-        Draw.reset();
-    }
-
     void drawPlan(BuildPlan plan, float alpha){
         plan.animScale = 1f;
         if(plan.breaking){
@@ -274,11 +243,10 @@ abstract class BuilderComp implements Posc, Statusc, Teamc, Rotc{
 
     void drawPlanTop(BuildPlan plan, float alpha){
         if(!plan.breaking){
-            if(lastFrame != graphics.getFrameId()) getVisiblePlans();
             Draw.reset();
-            Draw.mixcol(Color.white, buildPlanAlpha);
+            Draw.mixcol(Color.white, 0.24f + Mathf.absin(Time.globalTime, 6f, 0.28f));
             Draw.alpha(alpha);
-            plan.block.drawPlanConfigTop(plan, visiblePlans);
+            plan.block.drawPlanConfigTop(plan, plans);
         }
     }
 
@@ -388,7 +356,7 @@ abstract class BuilderComp implements Posc, Statusc, Teamc, Rotc{
         }
 
         //draw remote plans.
-        if(core != null && active && !isLocal() && !(tile.block() instanceof ConstructBlock)){
+        if(core != null && active && !isLocal() && !(tile.block() instanceof ConstructBlock) && !state.isPaused()){
             Draw.z(Layer.plans - 1f);
             drawPlan(plan, 0.5f);
             drawPlanTop(plan, 0.5f);

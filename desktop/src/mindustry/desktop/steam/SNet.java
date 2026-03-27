@@ -73,8 +73,10 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
                         int len = snet.readP2PPacket(from, readBuffer, 0);
                         if(len >= readBuffer.remaining()) Log.warn("@ byte steam packet exceeds max size of @", len, readBuffer.remaining());
                         readBuffer.limit(len);
+                        readCopyBuffer.limit(readBuffer.capacity());
                         readCopyBuffer.position(0);
                         readCopyBuffer.put(readBuffer);
+                        readCopyBuffer.limit(len);
                         readCopyBuffer.position(0);
                         int fromID = from.getAccountID();
                         Object output = serializer.read(readCopyBuffer);
@@ -288,9 +290,10 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
         }
 
         int version = Strings.parseInt(smat.getLobbyData(steamIDLobby, "version"), -1);
+        boolean hidden = smat.getLobbyData(steamIDLobby, "hidden").equals("true");
 
         //check version
-        if(version != Version.build){
+        if(version != Version.build && !hidden){
             ui.loadfrag.hide();
             ui.showInfo("[scarlet]" + (version > Version.build ? KickReason.clientOutdated : KickReason.serverOutdated) + "\n[]" +
                 Core.bundle.format("server.versions", Version.build, version));

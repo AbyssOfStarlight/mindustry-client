@@ -205,20 +205,27 @@ fun setupCommands() {
 
     var installingKt = false
     // This command doesn't work unless the supporting jar file is on the class path
-    register("kt <code...>", Core.bundle.get("client.command.kts.description")) { args, player: Player ->
-        try { ScriptEngineHolder } catch (_: Throwable) { player.sendMessage("[scarlet]The current java install does not support scripting. Please install a full jvm"); return@register }
+    register("kt <code...>", Core.bundle.get("client.command.kt.description")) { args, player: Player ->
+        val file = Fi(ScriptEngineHolder::class.java.protectionDomain.codeSource.location.toURI().path).sibling("fooKotlinScriptSupport.jar")
+        val version = 1 // The kotlin version needs bumping every so often to support new java versions. Easiest way is to redownload the file.
 
-        if (installingKt) player.sendMessage("[scarlet]Already installing kotlin script support")
-            if (ScriptEngineHolder.kts == null) ui.showConfirm("It seems that you do not have kotlin script support installed. Would you like to download it? (~60MB)") { // FINISHME: Bundle
+        try { ScriptEngineHolder } catch (_: Throwable) { player.sendMessage("client.command.kt.unsupported".bundle()); return@register }
+
+        if (installingKt) player.sendMessage("client.command.kt.installing".bundle())
+        else if (Core.settings.getInt("fooScriptVersion") != version || ScriptEngineHolder.kts == null) ui.showConfirm("client.command.kt.install".bundle()) {
+            Log.info("Download")
             installingKt = true
             becontrol.downloadJar(
                 "https://github.com/mindustry-antigrief/kotlinScriptSupport/releases/latest/download/fooKotlinScriptSupport.jar",
-                Fi(ScriptEngineHolder::class.java.protectionDomain.codeSource.location.toURI().path).sibling("fooKotlinScriptSupport.jar"),
-                { ui.showConfirm("Finished downloading kotlin script support. You must restart the game to use it. Restart now?") { restartGame() } },
-                { player.sendMessage("[scarlet]Problem downloading kotlin script support ${it.printStackTrace()}") }
+                file,
+                { Core.settings.put("fooScriptVersion", version); ui.showConfirm("client.command.kt.finished".bundle()) { restartGame() } },
+                { player.sendMessage("client.command.kt.error".bundle(Strings.neatError(it))) }
             )
         }
-        player.sendMessage("[accent]${try { ScriptEngineHolder.kts?.eval(args[0]) ?: return@register } catch (e: Throwable /* ScriptException */) { e.message }}")
+        else {
+            Log.info("Existing")
+            player.sendMessage("[accent]${try { ScriptEngineHolder.kts!!.eval(args[0]) } catch (e: Throwable /* ScriptException */) { e.message }}")
+        }
     }
 
     register("/js <code...>", Core.bundle.get("client.command.serverjs.description")) { args, player ->
