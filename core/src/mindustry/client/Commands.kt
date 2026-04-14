@@ -393,11 +393,13 @@ fun setupCommands() {
 
     register("stoppathing <name/id...>", Core.bundle.get("client.command.stoppathing.description")) { args, _ ->
         val name = args.joinToString(" ")
-        val player = Groups.player.find { it.id == Strings.parseInt(name) } ?: Groups.player.minByOrNull { Strings.levenshtein(
-            Strings.stripColors(it.name), name) }!!
-        Main.send(CommandTransmission(CommandTransmission.Commands.STOP_PATH, Main.keyStorage.cert() ?: return@register, player))
-        // FINISHME: Force stop instead of prompt
-        // FINISHME: success message
+        val player = Groups.player.find { it.id == Strings.parseInt(name) } ?:
+            Groups.player.minByOrNull { biasedLevenshtein(Strings.stripColors(it.name), name, false, true) }!!
+        Main.send(CommandTransmission(CommandTransmission.Commands.STOP_PATH, Main.keyStorage.cert() ?: run {
+            player.sendMessage("Failed to send transmission: invalid certificate!")
+            return@register
+        }, player))
+        player.sendMessage("Stopped pathing of player ${player.name}[white].")
     }
 
     register("c <message...>", Core.bundle.get("client.command.c.description")) { args, _ ->

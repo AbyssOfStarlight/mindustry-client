@@ -100,7 +100,7 @@ public class ChatFragment extends Table{
                     }
                 }
                 if (input.keyTap(Binding.chatMode) && !tabConsumed) {
-                    nextMode();
+                    nextMode(input.shift());
                 }
                 scrollPos = (int)Mathf.clamp(scrollPos + input.axis(Binding.chatScroll), 0, Math.max(0, messages.size - messagesShown));
             }
@@ -417,15 +417,15 @@ public class ChatFragment extends Table{
         if (message.startsWith("/") || message.startsWith(ClientVars.clientCommandHandler.prefix)) return;
         var coords = NetClient.findCoords(message, true);
         if (coords.size == 0) return;
-        Log.debug("Found coords in message: @", message);
         var msg = new StringBuilder(message);
         for (int i = coords.size - 1; i >= 0; i--) {
             var c = coords.get(i);
             msg.delete(c.start, c.end);
             if (c.start > 0 && msg.length() > c.start && msg.charAt(c.start-1) == ' ' && msg.charAt(c.start) == ' ') msg.deleteCharAt(c.start); // Coords in the middle with a space on either side: delete one of the spaces
+            if (msg.length() > 0 && msg.charAt(0) == ' ') msg.deleteCharAt(0); // Make sure the message doesn't start with a space (coords were right at the start)
+            if (msg.length() > 0 && msg.charAt(msg.length() - 1) == ' ') msg.deleteCharAt(msg.length() - 1); // Make sure the message doesn't end with a space (coords were right at the end)
         }
         var c = coords.first().pos;
-        Log.debug("Ping at @, @", c.x/8, c.y/8);
         Call.pingLocation(player, c.x, c.y, msg.toString());
     }
 
@@ -580,10 +580,13 @@ public class ChatFragment extends Table{
     }
 
     public void nextMode(){
+        nextMode(false);
+    }
+    public void nextMode(boolean shift){
         ChatMode prev = mode;
 
         do{
-            mode = mode.next();
+            mode = mode.next(shift);
         }while(!mode.isValid());
 
         if(chatfield.getText().startsWith(prev.normalizedPrefix())){
@@ -755,7 +758,13 @@ public class ChatFragment extends Table{
     private enum ChatMode{
         normal(""),
         team("/t"),
-        admin("/a", () -> player.admin || Server.io.b() && ClientVars.rank >= 4),
+        admin("/a", () ->
+            //Only add "/a" to tab cycle if there is another admin to chat with
+            (player.admin && Groups.player.find(p -> p.admin && p != player) != null)
+            //Unless it's io, because the other player may not have the admin flag
+            || (Server.io.b() && ClientVars.rank >= 4)
+            || settings.getBool("always-allow-admin-chat", false)
+        ),
         staff("/s", () -> Server.fish.b() && settings.getBool("fish-staff", false)),
         client("!c");
 
@@ -774,7 +783,10 @@ public class ChatFragment extends Table{
         }
 
         public ChatMode next(){
-            return all[(ordinal() + 1) % all.length];
+            return next(false);
+        }
+        public ChatMode next(boolean shift){
+            return all[(ordinal() + all.length + (shift ? -1 : 1)) % all.length];
         }
 
         public String normalizedPrefix(){
