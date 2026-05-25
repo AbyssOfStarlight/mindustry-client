@@ -185,6 +185,8 @@ public class Mods implements Loadable{
             count[0] += packSprites(sprites, mod, true, queues);
             count[0] += packSprites(overrides, mod, false, queues);
 
+            if(mod.main != null) mod.main.packSprites(packer);
+
             Log.debug("Packed @ images for mod '@'.", sprites.size + overrides.size, mod.meta.name);
             totalSprites += sprites.size + overrides.size;
         });
@@ -246,12 +248,18 @@ public class Mods implements Loadable{
 
     private void loadIcon(LoadedMod mod){
         //try to load icon for each mod that can have one
-        if(mod.root.child("icon.png").exists() && !headless && !mod.attemptedIconLoad){
-            try{
-                mod.iconTexture = new Texture(mod.root.child("icon.png"));
-                mod.iconTexture.setFilter(TextureFilter.linear);
-            }catch(Throwable t){
-                Log.err("Failed to load icon for mod '" + mod.name + "'.", t);
+        if(headless) return;
+
+        if(!mod.attemptedIconLoad){
+            Fi icon = mod.root.child("icon.png");
+            if(!icon.exists()) icon = mod.root.child("preview.png");
+            if(icon.exists()){
+                try{
+                    mod.iconTexture = new Texture(icon);
+                    mod.iconTexture.setFilter(TextureFilter.linear);
+                }catch(Throwable t){
+                    Log.err("Failed to load icon for mod '@'.", mod.name, t);
+                }
             }
         }
         mod.attemptedIconLoad = true;
@@ -266,6 +274,8 @@ public class Mods implements Loadable{
             String
             baseName = file.nameWithoutExtension(),
             regionName = baseName.contains(".") ? baseName.substring(0, baseName.indexOf(".")) : baseName;
+
+            if(baseName.isEmpty()) continue; //fixes #11855 in case anyone tries to do it again
 
             if(!prefix && !Core.atlas.has(regionName)){
                 Log.warn("Sprite '@' in mod '@' attempts to override a non-existent sprite.", regionName, mod.name);
@@ -909,10 +919,7 @@ public class Mods implements Loadable{
             checkDependencies(newImports, newImports.contains(m -> m.softDependencies.any()));
         }else{
             ui.showInfoOnHidden("@mods.reloadexit", () -> {
-                if(settings.getBool("autorestart")){
-                    Log.info("Exiting to reload mods.");
-                    ClientUtils.restartGame();
-                }
+                ClientUtils.restartGame();
             });
         }
     }

@@ -423,10 +423,7 @@ public class ModsDialog extends BaseDialog{
 
     private void reload(){
         ui.showInfoOnHidden("@mods.reloadexit", () -> {
-            if(settings.getBool("autorestart")){
-                Log.info("Exiting to reload mods.");
-                ClientUtils.restartGame();
-            }
+            ClientUtils.restartGame();
         });
     }
 
@@ -632,7 +629,7 @@ public class ModsDialog extends BaseDialog{
 
                     sel.buttons.button("@mods.browser.view-releases", Icon.zoom, () -> {
                         BaseDialog load = new BaseDialog("");
-                        load.cont.add("[accent]Fetching Releases...");
+                        load.cont.add("[accent]" + Core.bundle.get("mods.browser.fetching"));
                         load.show();
                         Http.get(ghApi + "/repos/" + mod.repo + "/releases", res -> {
                             var json = Jval.read(res.getResultAsString());

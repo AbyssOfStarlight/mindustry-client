@@ -155,6 +155,9 @@ public class DesktopInput extends InputHandler{
                         }else if(Navigation.state == NavigationState.FOLLOWING){
                             str.append("\n").append(bundle.format("client.stoppath", Binding.stopFollowingPath.value.key.toString()));
                         }
+                        if(panning){
+                            str.append("\n").append(bundle.format("client.resetcamera", Binding.resetCamera.value.key.toString()));
+                        }
 
                         if(selectPlans.any()){ // Any selection
                             str.append("\n").append(bundle.format("schematic.flip", Binding.schematicFlipX.value.key.toString(), Binding.schematicFlipY.value.key.toString()));
@@ -445,8 +448,8 @@ public class DesktopInput extends InputHandler{
                     if (Time.timeSinceMillis(lastShiftZ) < 400) Navigation.navigateTo(lastSentPos.cpy().scl(tilesize));
                     else Spectate.INSTANCE.spectate(lastSentPos.cpy().scl(tilesize));
                 } else if(input.ctrl()) {
-                    if (Time.timeSinceMillis(lastShiftZ) < 400) Navigation.navigateTo(lastCorePos.cpy().scl(tilesize));
-                    else Spectate.INSTANCE.spectate(lastCorePos.cpy().scl(tilesize)); // reusing lastShiftZ should be fine since its a small interval welp
+                    if (Time.timeSinceMillis(lastShiftZ) < 400) Navigation.navigateTo(lastWarnPos.cpy().scl(tilesize));
+                    else Spectate.INSTANCE.spectate(lastWarnPos.cpy().scl(tilesize)); // reusing lastShiftZ should be fine since its a small interval welp
                 }
                 lastShiftZ = Time.millis();
 

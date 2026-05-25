@@ -16,6 +16,7 @@ import mindustry.client.*;
 import mindustry.core.*;
 import mindustry.gen.*;
 import mindustry.logic.*;
+import mindustry.mod.*;
 import mindustry.ui.*;
 import mindustry.ui.dialogs.*;
 import mindustry.world.*;
@@ -24,8 +25,9 @@ import mindustry.world.meta.*;
 import static mindustry.Vars.*;
 
 public class MessageBlock extends Block{
-    //don't change this too much unless you want to run into issues with packet sizes
-    public int maxTextLength = 300;
+    /** writeUTF maximum UTF-8 length per char is 3, so 3*400 = 1200 bytes, the max string byte size */
+    @NoPatch
+    public int maxTextLength = 400;
     public int maxNewlines = 24;
 
     public MessageBlock(String name){
@@ -108,13 +110,13 @@ public class MessageBlock extends Block{
         public void buildConfiguration(Table table){
             table.button(Icon.pencil, Styles.cleari, () -> {
                 if(mobile){
-                    var contents = this.message.toString();
+                    var contents = message;
                     Core.input.getTextInput(new TextInput(){{
-                        text = contents;
+                        text = contents.toString();
                         multiline = true;
                         maxLength = maxTextLength;
                         accepted = str -> {
-                            if(!str.equals(text)) configure(str);
+                            if(!str.contentEquals(contents)) configure(str);
                         };
                     }});
                 }else{
@@ -141,7 +143,7 @@ public class MessageBlock extends Block{
                         dialog.hide();
                     }).size(150f, 60f);
                     dialog.buttons.button("@ok", () -> {
-                        if(!a.getText().equals(message.toString())) configure(a.getText());
+                        if(!a.getText().contentEquals(message)) configure(a.getText());
                         dialog.hide();
                     }).size(130f, 60f);
                     dialog.update(() -> {

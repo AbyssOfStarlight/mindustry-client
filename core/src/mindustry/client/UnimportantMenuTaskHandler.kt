@@ -33,14 +33,14 @@ abstract class BackgroundTask<T>(val longTaskDuration: Int = 0, @JvmField val un
     /** @return whether the task is complete */
     abstract fun processStep(): Boolean
 
-    /** @return whether the tak should be processed */
+    /** @return whether the task should be processed */
     open fun shouldProcess(): Boolean = true
 
     /** Add extra units to this task, automatically queues the task if needed. */
     @Synchronized
     open fun addUnit(unit: T) {
         units.add(unit)
-        submit()
+        if (!queued) submit() // Only submit if not queued
     }
 
     @Synchronized
@@ -58,6 +58,7 @@ abstract class BackgroundTask<T>(val longTaskDuration: Int = 0, @JvmField val un
     /** Runs all remaining units immediately */
     @Synchronized
     fun block() { // Dang. I almost wrote this whole class without any jank
+        if (!queued) return // Do not attempt to process if the queue is empty, this will cause crashes on removeFirst and such.
         do {
             lastLongRunningTask = 0
             start = Time.millis()
@@ -68,7 +69,7 @@ abstract class BackgroundTask<T>(val longTaskDuration: Int = 0, @JvmField val un
     companion object {
         private val tasks = Queue<BackgroundTask<*>>()
         private var lastLongRunningTask = 0L
-        private var start: Long = 0
+        private var start = 0L
 
         fun update(budgetMillis: Int = Core.settings.getInt("maxsyncbackgroundtaskduration", 15)) {
             start = Time.millis()
