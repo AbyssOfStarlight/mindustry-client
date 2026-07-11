@@ -46,12 +46,13 @@ object TileRecords {
         Events.on(EventType.BlockBuildBeginEventBefore::class.java) {
             val unit = it.unit ?: return@on
             if (it.newBlock == null || it.newBlock == Blocks.air) {
-                if(unit.isPlayer) {addLogH(TileBreakLog(it.tile, unit.toInteractor(), it.tile.block()))}
+                //if(unit.isPlayer) {addLogH(TileBreakLog(it.tile, unit.toInteractor(), it.tile.block()))}
+                if(unit.isPlayer) {addLogH(TileBreakLog(unit.toInteractor(), it.tile.block()))}
                 it.tile.getLinkedTiles { tile ->
                     addLog(tile, TileBreakLog(it.unit.toInteractor(), tile.block()))
                 }
             } else { // FINISHME: slightly very inefficient?
-                if(unit.isPlayer) {addLogH(TilePlacedLog(it.tile, unit.toInteractor(), it.newBlock, -1, null, it.tile == it.tile))}
+                if(unit.isPlayer) {addLogH(TilePlacedLog(unit.toInteractor(), it.newBlock, -1, null, it.tile == it.tile))}
                 it.tile.getLinkedTilesAs(it.newBlock) { tile ->
                     val log = TilePlacedLog(it.unit.toInteractor(), it.newBlock, it.rotation, null, tile == it.tile)
                     addLog(tile, log)
@@ -88,14 +89,6 @@ object TileRecords {
             }
         }
 
-        /*Events.on(EventType.ConfigEventBefore::class.java) {
-            if (it.player != null) Seer.blockConfig(it.player, it.tile.tile, it.value)
-            val constructor = if ((it.player == null) && it.tile.tile.block() is PowerNode) ::NodeLinkAddedTileLog else ::ConfigureTileLog
-            it.player?.let { player -> addLogH(ConfigureTileLog(it.tile.tile, player.toInteractor(), it.tile.tile.block(), it.tile.rotation, it.value))}
-            it.tile.tile.getLinkedTiles { tile ->
-                addLog(tile, constructor(tile, it.player.toInteractor(), tile.block(), it.tile.rotation, it.value))
-            }
-        }*/
 
         Events.on(EventType.BuildPayloadPickup::class.java) {
             it.tile.getLinkedTiles { tile ->
@@ -135,11 +128,20 @@ object TileRecords {
         Events.on(EventType.BuildRotateEvent::class.java) {
             val player = it.unit?.player ?: return@on
             val direction = rotationDirection(it.previous, it.build.rotation)
-            addLogH(RotateTileLog(it.build.tile, player.toInteractor(), it.build.block, it.build.rotation, direction))
+            //addLogH(RotateTileLog(it.build.tile, player.toInteractor(), it.build.block, it.build.rotation, direction))
+            addLogH(RotateTileLog(player.toInteractor(), it.build.block, it.build.rotation, direction))
             it.build.tile.getLinkedTiles { tile ->
                 addLog(tile, RotateTileLog(player.toInteractor(), it.build.block, it.build.rotation, direction))?.apply {
                     rotation = it.previous
                 }
+            }
+        }
+
+        Events.on(EventType.ConfigEventBefore::class.java) {
+            if (it.player != null) Seer.blockConfig(it.player, it.tile.tile, it.value)
+            addLogH(ConfigureTileLog(it.player.toInteractor(), it.tile.tile.block(), it.tile.rotation, it.value))
+            it.tile.tile.getLinkedTiles { tile ->
+                addLog(tile, ConfigureTileLog(it.player.toInteractor(), tile.block(), it.tile.rotation, it.value))
             }
         }
 

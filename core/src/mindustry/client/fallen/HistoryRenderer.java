@@ -81,7 +81,7 @@ public class HistoryRenderer {
             if (plan.lastacs == null) continue;
 
             if (filter != null) {
-                if (!Strings.stripColors(plan.lastacs).equals(filter)) continue;
+                if (!Strings.stripColors(plan.lastacs).toLowerCase().contains(filter.toLowerCase())) continue;
             } else if (!showBlocks) continue;
 
             Block b = content.block(plan.block);
@@ -110,7 +110,7 @@ public class HistoryRenderer {
 
             String cleanPlanName = Strings.stripColors(plan.lastacs);
             if (filter != null) {
-                if (!cleanPlanName.equals(filter)) continue;
+                if (!cleanPlanName.toLowerCase().contains(filter.toLowerCase())) continue;
             } else if (!showBlocks) continue;
 
             Block b = content.block(plan.block);
@@ -161,7 +161,7 @@ public class HistoryRenderer {
             String cleanKName = Strings.stripColors(kunit.playerName);
 
             if (filter != null) {
-                if (!cleanKName.equals(filter)) continue;
+                if (!cleanKName.contains(filter.toLowerCase())) continue;
             } else {
                 if (!globalShow) continue;
             }

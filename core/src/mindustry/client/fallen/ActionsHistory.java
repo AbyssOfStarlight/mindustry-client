@@ -22,6 +22,9 @@ public class ActionsHistory {
     public static Queue<BlockConfigPlayerPlan> blockconfplayersplans = new LimitedQueue<>(MAX_HISTORY_SIZE, "BlockConfigs");
     public static Queue<UnitsKilledByPlayers> deathunitsplan = new LimitedQueue<>(MAX_HISTORY_SIZE, "UnitsKilled");
     public static Queue<UnitsKilledByControllPlayers> deathunitscontrolplan = new LimitedQueue<>(MAX_HISTORY_SIZE, "UnitsControlKill");
+    public static Queue<UnitCommandHistoryPlan> unitcommandsplans = new LimitedQueue<>(MAX_HISTORY_SIZE, "UnitCommands");
+    public static Queue<UnitStateHistoryPlan> unitstatesplans = new LimitedQueue<>(MAX_HISTORY_SIZE, "UnitStates");
+    public static final Seq<String> warnedGriefers = new Seq<>();
 
     public static final Seq<Player> playeratmap = new Seq<>();
 
@@ -32,12 +35,17 @@ public class ActionsHistory {
         deathunitscontrolplan.clear();
         playeratmap.clear();
         playeritemsplans.clear();
+        unitcommandsplans.clear();
+        unitstatesplans.clear();
+        warnedGriefers.clear();
 
         ((LimitedQueue<?>)blocksplayersplans).resetWarning();
         ((LimitedQueue<?>)playeritemsplans).resetWarning();
         ((LimitedQueue<?>)blockconfplayersplans).resetWarning();
         ((LimitedQueue<?>)deathunitsplan).resetWarning();
         ((LimitedQueue<?>)deathunitscontrolplan).resetWarning();
+        ((LimitedQueue<?>)unitcommandsplans).resetWarning();
+        ((LimitedQueue<?>)unitstatesplans).resetWarning();
     }
 
 
@@ -93,6 +101,7 @@ public class ActionsHistory {
         public final short x, y, rotation, block;
         public final String lastacs;
         public final Object config;
+        public final long timestamp;
         public boolean wasbreaking;
 
         public BlockPlayerPlan(int x, int y, short rotation, short block, Object config, String lastacs, boolean wasbreaking){
@@ -103,18 +112,21 @@ public class ActionsHistory {
             this.config = config;
             this.lastacs = lastacs;
             this.wasbreaking = wasbreaking;
+            this.timestamp = System.currentTimeMillis();
         }
     }
 
     public static class BlockConfigPlayerPlan {
         public final short x, y, block;
         public final String lastacs;
+        public final long timestamp;
 
         public BlockConfigPlayerPlan(int x, int y, short block, String lastacs){
             this.x = (short)x;
             this.y = (short)y;
             this.block = block;
             this.lastacs = lastacs;
+            this.timestamp = System.currentTimeMillis();
         }
     }
 
@@ -169,6 +181,59 @@ public class ActionsHistory {
             this.item = item;
             this.take = take;
             this.timestamp = System.currentTimeMillis();
+        }
+    }
+
+    // Класс для хранения типа и количества
+    public static class UnitTypeCount {
+        public UnitType type;
+        public int count;
+        public UnitTypeCount(UnitType type, int count) {
+            this.type = type;
+            this.count = count;
+        }
+    }
+
+    // Класс для приказов (Движение/Атака)
+    public static class UnitCommandHistoryPlan {
+        public final String playerName;
+        public final Seq<UnitTypeCount> unitTypes;
+        public final float x, y;
+        public final String targetName;
+        public final long timestamp;
+
+        public UnitCommandHistoryPlan(String playerName,  Seq<UnitTypeCount> unitTypes, float x, float y, String targetName) {
+            this.playerName = playerName;
+            this.unitTypes = unitTypes;
+            this.x = x;
+            this.y = y;
+            this.targetName = targetName;
+            this.timestamp = System.currentTimeMillis();
+        }
+        public int getTotalCount() {
+            int total = 0;
+            for(var ut : unitTypes) total += ut.count;
+            return total;
+        }
+    }
+
+    // Класс для смены режима (Строить/Чинить и т.д.)
+    public static class UnitStateHistoryPlan {
+        public final String playerName;
+        public final Seq<UnitTypeCount> unitTypes;
+        public final String commandName;
+        public final long timestamp;
+
+        public UnitStateHistoryPlan(String playerName,  Seq<UnitTypeCount> unitTypes, String commandName) {
+            this.playerName = playerName;
+            this.unitTypes = unitTypes;
+            this.commandName = commandName;
+            this.timestamp = System.currentTimeMillis();
+        }
+        public int getTotalCount() {
+            int total = 0;
+            for(var ut : unitTypes) total += ut.count;
+            return total;
         }
     }
 }

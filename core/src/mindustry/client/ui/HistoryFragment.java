@@ -32,7 +32,7 @@ public class HistoryFragment extends Table {
     private boolean centered = false;
 
     enum LogType {
-        BLOCKS, CONFIGS, ITEMS, DEATHS
+        BLOCKS, CONFIGS, ITEMS, DEATHS, COMMANDS, STATES
     }
 
     public void build(Group parent) {
@@ -121,6 +121,8 @@ public class HistoryFragment extends Table {
             case CONFIGS -> ActionsHistory.blockconfplayersplans.size;
             case ITEMS -> ActionsHistory.playeritemsplans.size;
             case DEATHS -> ActionsHistory.deathunitsplan.size + ActionsHistory.deathunitscontrolplan.size;
+            case COMMANDS -> ActionsHistory.unitcommandsplans.size;
+            case STATES -> ActionsHistory.unitstatesplans.size;
         };
 
         if (count >= 1000) return (count / 100) / 10.0f + "k";
@@ -146,6 +148,8 @@ public class HistoryFragment extends Table {
             case CONFIGS -> buildConfigList(listTable);
             case ITEMS -> buildItemList(listTable);
             case DEATHS -> buildDeathList(listTable);
+            case COMMANDS -> buildUnitCommandList(listTable);
+            case STATES -> buildUnitStateList(listTable);
         }
 
         if (listTable.getChildren().isEmpty()) {
@@ -156,9 +160,11 @@ public class HistoryFragment extends Table {
 
     private void buildBlockList(Table t) {
         for (var p : ActionsHistory.blocksplayersplans) {
-            if (!filter(p.lastacs)) continue;
+            String blockName = content.block(p.block).localizedName;
+            if (!filter(p.lastacs) && !filter(blockName)) continue;
+
             t.table(Styles.black3, row -> {
-                //row.add(formatTime(p.timestamp)).color(Color.gray).fontScale(0.8f).width(75).padRight(8);
+                row.add(formatTime(p.timestamp)).color(Color.gray).fontScale(0.8f).width(75).padRight(8);
                 row.image(content.block(p.block).uiIcon).size(22).padRight(4);
                 row.add(p.lastacs).growX().left().color(Pal.accent).ellipsis(true);
                 row.add(p.wasbreaking ? "[scarlet]B" : "[green]S").width(24);
@@ -170,9 +176,11 @@ public class HistoryFragment extends Table {
 
     private void buildConfigList(Table t) {
         for (var p : ActionsHistory.blockconfplayersplans) {
-            if (!filter(p.lastacs)) continue;
+            String blockName = content.block(p.block).localizedName;
+            if (!filter(p.lastacs) && !filter(blockName)) continue;
+
             t.table(Styles.black3, row -> {
-                //row.add(formatTime(p.timestamp)).color(Color.gray).fontScale(0.8f).width(75).padRight(8);
+                row.add(formatTime(p.timestamp)).color(Color.gray).fontScale(0.8f).width(75).padRight(8);
                 row.image(content.block(p.block).uiIcon).size(22).padRight(4);
                 row.add(p.lastacs).growX().left().color(Pal.accent).ellipsis(true);
                 row.button(Icon.move, Styles.cleari, () -> Spectate.INSTANCE.spectate(new Vec2(p.x * tilesize, p.y * tilesize))).size(34);
@@ -184,7 +192,7 @@ public class HistoryFragment extends Table {
     private void buildItemList(Table t) {
         for (var p : ActionsHistory.playeritemsplans) {
             String name = p.player != null ? p.player.name : "Unknown";
-            if (!filter(name) && (p.item == null || !filter(p.item.name))) continue;
+            if (!filter(name) && (p.item == null || !filter(p.item.localizedName))) continue;
             t.table(Styles.black3, row -> {
                 row.add(formatTime(p.timestamp)).color(Color.gray).fontScale(0.8f).width(75).padRight(8);
                 row.add(name).growX().left().color(Pal.accent).ellipsis(true);
@@ -198,7 +206,7 @@ public class HistoryFragment extends Table {
 
     private void buildDeathRows(Table t, Queue<? extends ActionsHistory.UnitsKilledByPlayers> queue) {
         for (var p : queue) {
-            if (!filter(p.playerName)) continue;
+            if (!filter(p.playerName) && !filter(p.unitType.localizedName)) continue;
             t.table(Styles.black3, row -> {
                 row.add(formatTime(p.timestamp)).color(Color.gray).fontScale(0.8f).width(75).padRight(8);
                 row.image(p.unitType.uiIcon).size(22).padRight(4);
@@ -222,5 +230,81 @@ public class HistoryFragment extends Table {
     private String formatTime(long ts) {
         date.setTime(ts);
         return dateFormat.format(date);
+    }
+
+    private void buildUnitCommandList(Table t) {
+        for (var p : ActionsHistory.unitcommandsplans) {
+
+            boolean unitMatches = false;
+            for(var ut : p.unitTypes) {
+                if(filter(ut.type.localizedName)) {
+                    unitMatches = true;
+                    break;
+                }
+            }
+            if (!filter(p.playerName) && !unitMatches) continue;
+
+            t.table(Styles.black3, row -> {
+                row.add(formatTime(p.timestamp)).color(Color.gray).fontScale(0.8f).width(75).padRight(8).left();
+                row.image(p.targetName.equals("None") ? Icon.move.getRegion() : Icon.commandAttack.getRegion()).size(20).padRight(4);
+
+                row.table(col -> {
+                    col.left();
+                    col.defaults().left();
+                    col.add(p.playerName).left().color(Pal.accent).ellipsis(true);
+                    col.row();
+
+                    col.table(unitIcons -> {
+                        unitIcons.left();
+                        for(var ut : p.unitTypes) {
+                            unitIcons.image(ut.type.uiIcon).size(14).padRight(2);
+                            unitIcons.add(ut.count + "").fontScale(0.7f).color(Color.lightGray).padRight(6);
+                        }
+                        unitIcons.add("[gray]Target:[] " + p.targetName).fontScale(0.75f).padLeft(4);
+                    }).left();
+                }).growX().left();
+
+                row.button(Icon.move, Styles.cleari, () -> Spectate.INSTANCE.spectate(new Vec2(p.x, p.y))).size(34);
+            }).growX().margin(6).padBottom(2);
+            t.row();
+        }
+    }
+
+    private void buildUnitStateList(Table t) {
+        for (var p : ActionsHistory.unitstatesplans) {
+
+            boolean unitMatches = false;
+            for(var ut : p.unitTypes) {
+                if(filter(ut.type.localizedName)) {
+                    unitMatches = true;
+                    break;
+                }
+            }
+            if (!filter(p.playerName) && !unitMatches && !filter(p.commandName)) continue;
+
+            t.table(Styles.black3, row -> {
+                row.add(formatTime(p.timestamp)).color(Color.gray).fontScale(0.8f).width(75).padRight(8).left();
+                row.image(Icon.settings.getRegion()).size(20).padRight(4);
+
+                row.table(col -> {
+                    col.left();
+                    col.defaults().left();
+                    col.add(p.playerName).left().color(Pal.accent).ellipsis(true);
+                    col.row();
+
+                    col.table(unitIcons -> {
+                        unitIcons.left();
+                        for(var ut : p.unitTypes) {
+                            unitIcons.image(ut.type.uiIcon).size(14).padRight(2);
+                            unitIcons.add(ut.count + "").fontScale(0.7f).color(Color.lightGray).padRight(6);
+                        }
+                        unitIcons.add("[gray]Action:[] [sky]" + p.commandName).fontScale(0.75f).padLeft(4);
+                    }).left();
+                }).growX().left();
+
+                row.add().width(34);
+            }).growX().margin(6).padBottom(2);
+            t.row();
+        }
     }
 }

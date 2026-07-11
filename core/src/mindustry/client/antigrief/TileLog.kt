@@ -186,7 +186,7 @@ open class ConfigureTileLog(cause: Interactor, block: Block, val rotation: Int, 
 
     override fun toString() = "${eventPlayer()} ${Core.bundle.get("client.configured")} ${eventTarget()}"
 
-    private fun eventName(): String = Core.bundle.get("client.configured").let { if(Core.settings.getBool("colorizelogs")) "[accent]$it[]" else it }
+    private fun eventName(): String = Core.bundle.get("client.configured").let { if(Core.settings.getBool("colorizelogs")) "[blue]$it[]" else it }
 
     override fun toShortString() = "${eventPlayer()} ${eventName()} ${eventTarget()}"
 
@@ -327,7 +327,8 @@ class RotateTileLog(cause: Interactor, block: Block, val rotation: Int, val dire
     }
 }
 
-class CommandTileLog(tile: Tile, cause: Interactor, val block: Block, val poscom: Vec2) : TileLog(tile, cause) {
+//class CommandTileLog(tile: Tile, cause: Interactor, val block: Block, val poscom: Vec2) : TileLog(tile, cause) {
+class CommandTileLog(tile: Tile, cause: Interactor, val block: Block, val poscom: Vec2) : TileLog(cause) {
     override fun apply(previous: TileState) {
         previous.rotation = 0
     }

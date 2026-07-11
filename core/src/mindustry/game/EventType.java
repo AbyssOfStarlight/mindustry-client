@@ -929,4 +929,32 @@ public class EventType{
             this.message = message;
         }
     }
+
+    /** Событие отдачи приказа группе юнитов (движение/атака) */
+    public static class UnitCommandPositionEvent {
+        public final Player player;
+        public final int[] unitIds;
+        public final @Nullable Vec2 pos;
+        public final @Nullable Teamc target;
+
+        public UnitCommandPositionEvent(Player player, int[] unitIds, @Nullable Vec2 pos, @Nullable Teamc target) {
+            this.player = player;
+            this.unitIds = unitIds;
+            this.pos = pos;
+            this.target = target;
+        }
+    }
+
+    /** Событие смены режима юнита (приказ "строить", "чинить" или "ждать") */
+    public static class UnitStateChangeEvent {
+        public final Player player;
+        public final int[] unitIds;
+        public final UnitCommand command;
+
+        public UnitStateChangeEvent(Player player, int[] unitIds, UnitCommand command) {
+            this.player = player;
+            this.unitIds = unitIds;
+            this.command = command;
+        }
+    }
 }
