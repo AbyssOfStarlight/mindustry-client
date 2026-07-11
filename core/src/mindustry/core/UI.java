@@ -319,7 +319,6 @@ public class UI implements ApplicationListener, Loadable{
 
 
         PanelFragment.startInit();
-        mindustry.client.fallen.ActivityLogger.init();
 
         perffrag.build(group);
         new FadeInFragment().build(group);
