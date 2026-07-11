@@ -22,6 +22,8 @@ import arc.struct.*;
 import arc.util.*;
 import mindustry.*;
 import mindustry.client.claj.*;
+import mindustry.client.fallen.*;
+import mindustry.client.fallen.ai.AI;
 import mindustry.client.ui.*;
 import mindustry.client.utils.*;
 import mindustry.editor.*;
@@ -55,10 +57,16 @@ public class UI implements ApplicationListener, Loadable{
     public PanelFragment panelfragment;
     public PlayerBlockListFragment listblockfrag;
     public HistoryFragment historyFrag;
+    public FavoriteServersFrag favFrag;
+    public TrashDialog trashbase;
+    public MapInfoDialog mapInfoDial;
     public WaveInfoFrag waveInfoFrag;
     public MapInfoFrag mapInfoFrag;
     public LogicUnitControlFrag logicUnitControlFrag;
+    public ProductionAnalyzerFrag prodAnalyzer;
     public LogicSearchFrag logicSearchFrag;
+    public QuickSchemFrag quickSchemFrag;
+    public static AI ai;
     public PerformanceFragment perffrag;
 
     public WidgetGroup menuGroup, hudGroup;
@@ -232,10 +240,16 @@ public class UI implements ApplicationListener, Loadable{
         panelfragment = new PanelFragment();
         listblockfrag = new PlayerBlockListFragment();
         historyFrag = new HistoryFragment();
+        favFrag = new FavoriteServersFrag();
+        trashbase = new TrashDialog();
+        mapInfoDial = new MapInfoDialog();
         waveInfoFrag = new WaveInfoFrag();
         mapInfoFrag = new MapInfoFrag();
         logicUnitControlFrag = new LogicUnitControlFrag();
+        prodAnalyzer  = new ProductionAnalyzerFrag();
         logicSearchFrag = new LogicSearchFrag();
+        quickSchemFrag = new QuickSchemFrag();
+        ai = new AI();
 
         perffrag = new PerformanceFragment();
 
@@ -301,9 +315,14 @@ public class UI implements ApplicationListener, Loadable{
         waveInfoFrag.build(ui.hudGroup);
         mapInfoFrag.build(ui.hudGroup);
         logicUnitControlFrag.build(ui.hudGroup);
+        prodAnalyzer.build(ui.hudGroup);
         logicSearchFrag.build(ui.hudGroup);
+        favFrag.build(ui.hudGroup);
+        quickSchemFrag.build(ui.hudGroup);
+        ai.build();
 
 
+        PanelFragment.startInit();
         mindustry.client.fallen.ActivityLogger.init();
 
         perffrag.build(group);
