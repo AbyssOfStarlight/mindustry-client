@@ -23,7 +23,6 @@ import arc.util.*;
 import mindustry.*;
 import mindustry.client.claj.*;
 import mindustry.client.fallen.*;
-import mindustry.client.fallen.ai.AI;
 import mindustry.client.ui.*;
 import mindustry.client.utils.*;
 import mindustry.editor.*;
@@ -66,7 +65,6 @@ public class UI implements ApplicationListener, Loadable{
     public ProductionAnalyzerFrag prodAnalyzer;
     public LogicSearchFrag logicSearchFrag;
     public QuickSchemFrag quickSchemFrag;
-    public static AI ai;
     public PerformanceFragment perffrag;
 
     public WidgetGroup menuGroup, hudGroup;
@@ -249,7 +247,6 @@ public class UI implements ApplicationListener, Loadable{
         prodAnalyzer  = new ProductionAnalyzerFrag();
         logicSearchFrag = new LogicSearchFrag();
         quickSchemFrag = new QuickSchemFrag();
-        ai = new AI();
 
         perffrag = new PerformanceFragment();
 
@@ -319,7 +316,6 @@ public class UI implements ApplicationListener, Loadable{
         logicSearchFrag.build(ui.hudGroup);
         favFrag.build(ui.hudGroup);
         quickSchemFrag.build(ui.hudGroup);
-        ai.build();
 
 
         PanelFragment.startInit();
