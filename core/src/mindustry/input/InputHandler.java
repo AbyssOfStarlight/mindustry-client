@@ -439,6 +439,11 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                 Fx.moveCommand.at(posTarget);
             }
         }
+
+        if(finalBatch && player != null){
+            Teamc target = buildTarget != null ? buildTarget : unitTarget;
+            Events.fire(new UnitCommandPositionEvent(player, unitIds, posTarget, target));
+        }
     }
 
     @Remote(called = Loc.server, targets = Loc.both, forward = true)
@@ -473,6 +478,10 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                     }
                 }
             }
+        }
+
+        if(player != null && unitIds != null && command != null){
+            Events.fire(new UnitStateChangeEvent(player, unitIds, command));
         }
     }
 
@@ -2422,7 +2431,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         return !Core.scene.hasMouse()
         && !player.dead()
         && player.unit().validMine(tile)
-        && player.unit().acceptsItem(player.unit().getMineResult(tile))
+        && player.unit().acceptsItem(player.unit().getMineResult(tile)) //исправить потом
         && !((!Core.settings.getBool("doubletapmine") && tile.floor().playerUnmineable) && tile.overlay().itemDrop == null)
         && !((!Core.settings.getBool("doubletapmine") && tile.overlay().playerUnmineable) && tile.overlay().itemDrop != null);
     }

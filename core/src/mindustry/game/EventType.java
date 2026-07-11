@@ -3,6 +3,7 @@ package mindustry.game;
 import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
+import mindustry.ai.UnitCommand;
 import mindustry.core.GameState.*;
 import mindustry.ctype.*;
 import mindustry.gen.*;
