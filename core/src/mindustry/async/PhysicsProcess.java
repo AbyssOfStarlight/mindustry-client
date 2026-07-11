@@ -1,5 +1,6 @@
 package mindustry.async;
 
+import arc.Core;
 import arc.math.*;
 import arc.math.geom.*;
 import arc.math.geom.QuadTree.*;
@@ -90,6 +91,7 @@ public class PhysicsProcess implements AsyncProcess{
             Physicsc entity = ref.entity;
 
             //move by delta
+            if(entity instanceof Unitc unit && unit.isLocal() && Core.settings.getBool("no_collisions")) continue;
             entity.move(ref.body.x - ref.x, ref.body.y - ref.y);
         }
     }
