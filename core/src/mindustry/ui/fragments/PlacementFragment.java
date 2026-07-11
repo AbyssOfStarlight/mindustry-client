@@ -36,7 +36,7 @@ import java.util.*;
 import static mindustry.Vars.*;
 
 public class PlacementFragment{
-    final int rowWidth = 10;
+    final int rowWidth = Core.settings.getInt("placefragwidth", 7);
 
     public Category currentCategory = Category.distribution;
 

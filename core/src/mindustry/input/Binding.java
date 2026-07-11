@@ -132,6 +132,7 @@ public class Binding{
     showMassdriverConfigs = KeyBind.add("show_massdriver_configs", KeyCode.f3),
     forcePlaceModifier = KeyBind.add("force_place_modifier", KeyCode.altLeft),
     runJS = KeyBind.add("run_js", KeyCode.u),
+    toogle_fdlsit_frag = KeyBind.add("toogle_fdlsit_frag", KeyCode.p, "fallen"),
     block_show_plans = KeyBind.add("block_show_plans", KeyCode.plus, "fallen"),
     death_show_plans = KeyBind.add("death_show_plans", KeyCode.asterisk, "fallen"),
     deselect_half_units = KeyBind.add("deselect_half_units", KeyCode.j, "fallen"),

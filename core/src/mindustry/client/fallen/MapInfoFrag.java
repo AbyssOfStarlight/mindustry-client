@@ -56,7 +56,7 @@ public class MapInfoFrag extends Table {
         setSize(w, h);
 
         this.touchable = Touchable.childrenOnly;
-        visible(() -> visible && state.isGame());
+        visible(() -> ui.hudfrag.shown && visible && state.isGame());
 
         table(Styles.black6, main -> {
             // ВЕРХНЯЯ ПАНЕЛЬ
@@ -103,6 +103,8 @@ public class MapInfoFrag extends Table {
                         addProp(t, "Win Wave:", () -> state.rules.winWave > 0 ? "" + state.rules.winWave : "Inf", 0);
                         addProp(t, "Initial Sp:", () -> (state.rules.initialWaveSpacing / 60f) + "s", 300f);
                         addProp(t, "Wave Sp:", () -> (state.rules.waveSpacing / 60f) + "s", 120f);
+                        addProp(t, "Solar Power:", () -> state.rules.solarMultiplier + "x", 1.0f);
+                        addProp(t, "Unit Cap Var:", () -> state.rules.unitCapVariable ? "Yes" : "No", true);
                     }).padRight(4);
 
                     // Правая колонка: Multipliers
@@ -114,7 +116,9 @@ public class MapInfoFrag extends Table {
                         addProp(t, "Block HP:", () -> state.rules.blockHealthMultiplier + "x", d);
                         addProp(t, "Unit HP:", () -> state.rules.unitHealthMultiplier + "x", d);
                         addProp(t, "Unit Dmg:", () -> state.rules.unitDamageMultiplier + "x", d);
-                        addProp(t, "Solar Power:", () -> state.rules.solarMultiplier + "x", d);
+                        addProp(t, "Unit Cost:", () -> (state.rules.unitCostMultiplier) + "x", d);
+                        addProp(t, "Base Unit Cap:", () -> (state.rules.unitCap) + "", d);
+
                     });
                 }).row();
 
@@ -123,20 +127,23 @@ public class MapInfoFrag extends Table {
                     t.add("[accent]Rules Settings[]").colspan(4).padBottom(4).row();
                     t.defaults().growX().left().fontScale(0.8f);
 
-                    addBoolProp(t, "Fire", () -> state.rules.fire, true);
-                    addBoolProp(t, "Explosions", () -> state.rules.damageExplosions, true);
+
+                    addBoolProp(t, Core.bundle.get("map_inf.fire"), () -> state.rules.fire, false);
+                    addBoolProp(t,  Core.bundle.get("map_inf.dExplosions"), () -> state.rules.damageExplosions, true);
                     t.row();
-                    addBoolProp(t, "Reactor Blast", () -> state.rules.reactorExplosions, true);
-                    addBoolProp(t, "Logic Build", () -> state.rules.logicUnitBuild, true);
+                    addBoolProp(t, Core.bundle.get("map_inf.rExplosions"), () -> state.rules.reactorExplosions, false);
+                    addBoolProp(t, Core.bundle.get("map_inf.luBuild"), () -> state.rules.logicUnitBuild, false);
                     t.row();
-                    addBoolProp(t, "Schematics", () -> state.rules.schematicsAllowed, true);
-                    addBoolProp(t, "Core Capture", () -> state.rules.coreCapture, false);
+                    addBoolProp(t, Core.bundle.get("map_inf.sAllowed"), () -> state.rules.schematicsAllowed, true);
+                    addBoolProp(t, Core.bundle.get("map_inf.cCapture"), () -> state.rules.coreCapture, false);
                     t.row();
-                    addBoolProp(t, "Unit Ammo", () -> state.rules.unitAmmo, false);
-                    addBoolProp(t, "Fog of War", () -> state.rules.fog, false);
+                    addBoolProp(t, Core.bundle.get("map_inf.fogWar"), () -> state.rules.fog, false);
                     t.row();
-                    addBoolProp(t, "Incinerates", () -> state.rules.coreIncinerates, false);
-                    addBoolProp(t, "onlyDepositCore", () -> state.rules.onlyDepositCore, false);
+                    addBoolProp(t, Core.bundle.get("map_inf.coreInc"), () -> state.rules.coreIncinerates, true);
+                    addBoolProp(t, Core.bundle.get("map_inf.oDCore"), () -> state.rules.onlyDepositCore, false);
+                    t.row();
+                    addBoolProp(t, Core.bundle.get("map_inf.randWave"), () -> state.rules.randomWaveAI, false);
+                    addBoolProp(t, Core.bundle.get("map_inf.airSpawns"), () -> state.rules.airUseSpawns, false);
 
                 }).padTop(4).row();
 
@@ -299,7 +306,6 @@ public class MapInfoFrag extends Table {
             if((tr != null ? tr.unitDamageMultiplier : state.rules.unitDamageMultiplier) != 1f) v.ud = true;
             if((tr != null ? tr.unitCrashDamageMultiplier : state.rules.unitCrashDamageMultiplier) != 1f) v.ucr = true;
             if(state.rules.infiniteResources || (tr != null && tr.infiniteResources)) v.ir = true;
-            if(state.rules.unitAmmo && (tr != null && tr.infiniteAmmo)) v.ia = true;
         }
 
         float nameW = 100f; // Ширина колонки Team
@@ -350,10 +356,6 @@ public class MapInfoFrag extends Table {
                     boolean ir = state.rules.infiniteResources || (tr != null && tr.infiniteResources);
                     addVLine(rt); rt.add(ir ? "[green]" + Iconc.ok : "[gray]" + Iconc.cancel).width(ruleW);
                 }
-                if (v.ia) {
-                    boolean ia = !state.rules.unitAmmo || (tr != null && tr.infiniteAmmo);
-                    addVLine(rt); rt.add(ia ? "[green]" + Iconc.ok : "[gray]" + Iconc.cancel).width(ruleW);
-                }
             }).growX().row();
         }
     }
@@ -395,11 +397,8 @@ public class MapInfoFrag extends Table {
 
                 var teamRules = state.rules.teams.get(team);
                 boolean infRes = state.rules.infiniteResources || (teamRules != null && teamRules.infiniteResources);
-                boolean infAmmo = !state.rules.unitAmmo || (teamRules != null && teamRules.infiniteAmmo);
-
                 rt.add(infRes ? "[green]Yes" : "[gray]No").width(50);
                 rt.image(Tex.whiteui).color(Color.gray).width(1f).fillY().padLeft(4).padRight(4);
-                rt.add(infAmmo ? "[green]Yes" : "[gray]No").width(55);
             }).growX().pad(1).row();
         }
     }

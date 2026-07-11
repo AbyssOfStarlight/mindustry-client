@@ -511,7 +511,7 @@ public class SettingsMenuDialog extends BaseDialog{
         client.textPref("gamejointext", "");
         client.textPref("gamewintext", "");
         client.textPref("gamelosetext", "");
-        client.checkPref("autoupdate", true, i -> becontrol.checkUpdates = i);
+        client.checkPref("autoupdate", false, i -> becontrol.checkUpdates = i);
         client.checkPref("discordrpc", true, i -> platform.toggleDiscord(i));
         client.checkPref("pathnav", true);
         client.checkPref("nyduspadpatch", true);
@@ -541,18 +541,48 @@ public class SettingsMenuDialog extends BaseDialog{
         client.checkPref("client-experimentals", false);
 
         client.category("fallen");
-        client.checkPref("tilefragment", false);
-        client.checkPref("historyfragment", true);
-        client.checkPref("hidejoinleave", true);
-        client.checkPref("placeSchematicWithCleanup", true);
+        client.sliderPref("placefragwidth", 7,  3, 10, 1, String::valueOf);
+        client.checkPref("tilefragment", true);
+        client.checkPref("historyfragment", false);
+        client.checkPref("quickschems", false);
+        client.checkPref("wavefragment", false);
+        client.checkPref("mapinfofrag", false);
+        client.checkPref("unitcontrolfragment", false);
+        client.checkPref("hidejoinleave", false);
+        client.checkPref("placeSchematicWithCleanup", false);
+        client.checkPref("no_collisions", false);
+        client.checkPref("unitcontrolalarm", false);
+        client.checkPref("unitcontrolselfalarm", false);
+        client.sliderPref("unitcontrolalarmcount", 100, 1, 1000, 1, String::valueOf);
+
         client.checkPref("coredeathalarm", true);
         client.checkPref("coredeathalarmrecap", true);
         client.checkPref("playerunitdeathalarm", false);
         client.sliderPref("playerunitdeathalarmhp", 15000, 0, 24000, 50, String::valueOf);
-        client.sliderPref("yoffssetfdpamel", -100, -500, 500, 10, String::valueOf);
+        client.sliderPref("yoffssetfdpamel", -200, -900, 900, 10, String::valueOf);
+        client.sliderPref("buttonsizefdpamel", 30, 10, 70, 5, String::valueOf);
         client.sliderPref("fadedblockallplayers", 10, 0, 100, 1, String::valueOf);
         client.checkPref("resetschetags", false);
+        //client.checkPref("steal_map", false);
+        //client.checkPref("fd_autofill", false);
         client.updateUuid();
+        client.checkPref("forcechat", false);
+        client.textPref("uchatcolor", "");
+        client.sliderPref("uchatmode", 0, 0, 4, i -> {
+            if(i == 0) return "Выкл";
+            if(i == 1) return "Обычный";
+            if(i == 2) return "Градиент";
+            if(i == 3) return "Радуга";
+            return "Оптимизированный Красный";
+        });
+        client.checkPref("ihateattems", true);
+        client.checkPref("assistfixfd", false);
+        client.checkPref("alarmgriefblocks", false);
+        client.sliderPref("alarmgriefblocksbuild", 10, 0, 500, 1, String::valueOf);
+        client.sliderPref("alarmgriefblocksbreake", 100, 0, 500, 1, String::valueOf);
+        client.textPref("mynickshifter", "");
+
+
 
         if (settings.getBool("client-experimentals") || OS.hasProp("policone")) {
             client.category("experimental");

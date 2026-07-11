@@ -758,7 +758,9 @@ public class Control implements ApplicationListener, Loadable{
             }
 
             if(!mobile && Core.input.keyTap(Binding.screenshot) && !scene.hasField() && !scene.hasKeyboard()){
-                //renderer.takeMapScreenshot();
+                renderer.takeMapScreenshot();
+            }
+            if(!mobile && Core.input.keyTap(Binding.toogle_fdlsit_frag) && !scene.hasField() && !scene.hasKeyboard()){
                 ui.listblockfrag.toggle();
             }
 

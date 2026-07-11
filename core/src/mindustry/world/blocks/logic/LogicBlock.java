@@ -15,6 +15,7 @@ import arc.struct.*;
 import arc.util.*;
 import arc.util.io.*;
 import arc.util.pooling.*;
+import mindustry.Vars;
 import mindustry.ai.types.*;
 import mindustry.client.*;
 import mindustry.client.antigrief.*;
@@ -848,6 +849,16 @@ public class LogicBlock extends Block{
                 });
             }).size(40).tooltip("Restart code execution").disabled(b -> !ClientVars.configs.isEmpty());
 
+            table.button(Icon.copy, Styles.cleari, () ->{
+                Core.app.setClipboardText(this.code);
+            }).tooltip("@schematic.copy").size(40);
+            table.button(Icon.download, Styles.cleari, () ->{
+                String configcode = Core.app.getClipboardText().replace("\r\n", "\n");
+                this.code = configcode;
+                this.updateCode(configcode);
+                Call.tileConfig(Vars.player, this, this.config());
+            }).tooltip("@schematic.copy.import").size(40);
+            table.row();
             table.button(Icon.trash, Styles.cleari, () -> {
                 if(Core.input.shift()) removeCode();
                 else ui.showConfirm("@confirm", "Are you sure you want to delete this processor's code?", this::removeCode);
@@ -1028,11 +1039,14 @@ public class LogicBlock extends Block{
             Object[] values = new Object[varcount];
 
             for(int i = 0; i < varcount; i++){
-                String name = read.str();
-                Object value = TypeIO.readObjectBoxed(read, true);
-
-                names[i] = name;
-                values[i] = value;
+                try{
+                    String name = read.str();
+                    Object value = TypeIO.readObjectBoxed(read, true);
+                    names[i] = name;
+                    values[i] = value;
+                } catch (Exception ignored) {
+                    Log.err("Ошибка линков процессоров?", ignored);
+                }
             }
 
             int memory = read.i();

@@ -22,6 +22,7 @@ import mindustry.client.fallen.ActionsHistory;
 import mindustry.content.Blocks;
 import mindustry.entities.units.BuildPlan;
 import mindustry.game.EventType;
+import mindustry.game.Team;
 import mindustry.gen.*;
 import mindustry.graphics.Pal;
 import mindustry.net.NetConnection;
@@ -96,15 +97,33 @@ public class PlayerBlockListFragment {
 
                         info.button("Clear Filter", () -> {
                             name_for_plans = null;
-                        }).tooltip("Сбросить фильтр по имени");
+                        }).tooltip("Сбросить");
 
-                        info.button("[#cccccc]Repair", () -> {
-                            String searchName = Strings.stripColors(search.getText());
-                            repairPlayerBuild(searchName);
-                        });
-                        info.button("[#cccccc]Delete", () -> {
-                            String searchName = Strings.stripColors(search.getText());
-                            deletePlayerBuild(searchName);
+                        info.table(stats -> {
+                            String searchName = search.getText().isEmpty() ? "" : Strings.stripColors(search.getText()).toLowerCase();
+
+                            stats.button(t -> {
+                                        t.add("[green]+" + sumCache(builtCache, searchName));
+                                    }, Styles.cleart, () -> name_for_plans = search.getText())
+                                    .height(30).minWidth(50).pad(2).tooltip("Построено (сумма совпадений)");
+
+                            stats.button(t -> {
+                                        t.add("[red]-" + sumCache(breakCache, searchName));
+                                    }, Styles.cleart, () -> name_for_plans = search.getText())
+                                    .height(30).minWidth(50).pad(2).tooltip("Сломано (сумма совпадений)");
+
+                            stats.button(t -> {
+                                        t.add("[blue]~" + sumCache(configCache, searchName));
+                                    }, Styles.cleart, () -> name_for_plans = search.getText())
+                                    .height(30).minWidth(50).pad(2).tooltip("Конфиги (сумма совпадений)");
+
+                            stats.button(Icon.hammer, Styles.cleari, () -> {
+                                deletePlayerBuildCont(Strings.stripColors(search.getText()));
+                            }).tooltip("Восстановить всё найденное по поиску");
+
+                            stats.button(Icon.trash, Styles.cleari, () -> {
+                                repairPlayerBuildCont(Strings.stripColors(search.getText()));
+                            }).tooltip("Снести всё найденное по поиску");
                         });
 
                     });
@@ -126,6 +145,21 @@ public class PlayerBlockListFragment {
         Events.on(EventType.PlayerJoin.class, event -> {
             readd(event.player);
         });
+
+        Events.on(EventType.PlayerLeave.class, event -> {
+            readd(event.player);
+        });
+    }
+
+    private int sumCache(ObjectIntMap<String> cache, String search) {
+        if(search.isEmpty()) return 0;
+        int sum = 0;
+        for(var entry : cache.entries()){
+            if(entry.key.toLowerCase().contains(search)){
+                sum += entry.value;
+            }
+        }
+        return sum;
     }
 
     public void readd(Player p){
@@ -175,23 +209,24 @@ public class PlayerBlockListFragment {
 
         var target = Spectate.INSTANCE.getPos() instanceof Player p ? p : null;
 
+        search_players.removeAll(p -> p == null);
+
         search_players.sort(Structs.comps(
                 Structs.comparingBool((Player p) -> p != target),
                 Structs.comps(
-                        Structs.comparing(Player::team),
-                        Structs.comparingBool((Player p) -> !p.admin)
+                        Structs.comparing(p -> p.team() == null ? Team.derelict : p.team()),
+                        Structs.comparingBool((Player p) -> p == null || !p.admin)
                 )
         ));
         String searchText = search.getText().toLowerCase();
         boolean hasSearch = !searchText.isEmpty();
 
         for(var user : search_players){
+            if(user == null) continue;
+
             if(hasSearch && !Strings.stripColors(user.name().toLowerCase()).contains(searchText)) {
                 continue;
             }
-
-            NetConnection connection = user.con;
-            if(connection == null && net.server() && !user.isLocal()) continue;
 
             found = true;
 
@@ -262,7 +297,6 @@ public class PlayerBlockListFragment {
                         String targetName = Strings.stripColors(user.name());
                         repairPlayerBuild(targetName);
                     }).tooltip("Снести всё, что построил этот инвалид");
-
                 });
             }
 
@@ -298,11 +332,52 @@ public class PlayerBlockListFragment {
         }
     }
 
+    public static void deletePlayerBuildCont(String targetName) {
+        if (player.unit() == null) return;
+
+        for (ActionsHistory.BlockPlayerPlan plan : ActionsHistory.blocksplayersplans) {
+            if (plan.wasbreaking && plan.lastacs != null && Strings.stripColors(plan.lastacs).contains(targetName)) {
+                Block block = Vars.content.block(plan.block);
+                if (block == null || block == Blocks.air) continue;
+
+                player.unit().addBuild(new BuildPlan(plan.x, plan.y, plan.rotation, block, plan.config), true);
+            }
+        }
+    }
+
     public static void repairPlayerBuild(String targetName) {
         if (player.unit() == null) return;
 
         for (ActionsHistory.BlockPlayerPlan plan : ActionsHistory.blocksplayersplans) {
             if (!plan.wasbreaking && plan.lastacs != null && Strings.stripColors(plan.lastacs).equals(targetName)) {
+
+                Tile tile = world.tile(plan.x, plan.y);
+                if(tile != null && tile.build != null && tile.team() == player.team()){
+
+                    BuildPlan breakPlan = new BuildPlan(tile.build.tileX(), tile.build.tileY());
+                    breakPlan.breaking = true;
+
+                    boolean alreadyQueued = false;
+                    for(BuildPlan p : player.unit().plans){
+                        if(p.breaking && p.x == breakPlan.x && p.y == breakPlan.y){
+                            alreadyQueued = true;
+                            break;
+                        }
+                    }
+
+                    if(!alreadyQueued){
+                        player.unit().addBuild(breakPlan, true);
+                    }
+                }
+            }
+        }
+    }
+
+    public static void repairPlayerBuildCont(String targetName) {
+        if (player.unit() == null) return;
+
+        for (ActionsHistory.BlockPlayerPlan plan : ActionsHistory.blocksplayersplans) {
+            if (!plan.wasbreaking && plan.lastacs != null && Strings.stripColors(plan.lastacs).contains(targetName)) {
 
                 Tile tile = world.tile(plan.x, plan.y);
                 if(tile != null && tile.build != null && tile.team() == player.team()){

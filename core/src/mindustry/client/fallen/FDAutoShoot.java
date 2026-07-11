@@ -9,7 +9,6 @@ import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.*;
-import mindustry.client.ui.PanelFragment;
 import mindustry.content.*;
 import mindustry.entities.*;
 import mindustry.entities.units.WeaponMount;
@@ -33,11 +32,10 @@ public class FDAutoShoot {
 
 
     public static void update() {
+        if(player.unit() == null || player.unit().mining() || player.unit().isBuilding()) return;
         if (!Core.settings.getBool("smarttargeting", false)) {
             manualTarget = null;
             lastTargetPos = null;
-            drawTarget();
-            drawUnitAim();
             return;
         }
 
@@ -58,7 +56,7 @@ public class FDAutoShoot {
 
         // --- 2. РУЧНАЯ ПОПРАВКА (ЛКМ) ---
         if (Core.input.keyDown(Binding.select) && !Core.input.keyDown(KeyCode.space)) {
-            lastTargetPos = null;
+            //lastTargetPos = null;
             return;
         }
 
@@ -105,12 +103,14 @@ public class FDAutoShoot {
                 }
             });
 
-            if (targetBuilds.size > 1 && Time.time % 10 < 1) {
-                targetBuilds.sort((a, b) -> {
-                    float pa = getPriority(a), pb = getPriority(b);
-                    if (pa != pb) return Float.compare(pb, pa);
-                    return Float.compare(playerUnit.dst2(a), playerUnit.dst2(b));
-                });
+            if (!targetBuilds.isEmpty()) {
+                if (targetBuilds.size > 1) {
+                    targetBuilds.sort((a, b) -> {
+                        float pa = getPriority(a), pb = getPriority(b);
+                        if (pa != pb) return Float.compare(pb, pa);
+                        return Float.compare(playerUnit.dst2(a), playerUnit.dst2(b));
+                    });
+                }
                 finalTarget = targetBuilds.first();
             }
         }
@@ -129,10 +129,12 @@ public class FDAutoShoot {
             Unit mouseUnit = Units.closestEnemy(null, player.mouseX, player.mouseY, 16f, u -> u.targetable(player.team()));
             if (mouseUnit != null) {
                 manualTarget = mouseUnit;
+                lastTargetPos = mouseUnit;
             } else {
                 Building mouseBuild = world.buildWorld(player.mouseX, player.mouseY);
                 if (mouseBuild != null && mouseBuild.team != player.team()) {
                     manualTarget = mouseBuild;
+                    lastTargetPos = mouseBuild;
                 } else {
                     manualTarget = null;
                 }

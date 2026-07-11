@@ -13,6 +13,7 @@ import arc.scene.ui.TextField.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import arc.util.Timer;
 import mindustry.*;
 import mindustry.client.*;
 import mindustry.client.ui.*;
@@ -249,6 +250,7 @@ public class ChatFragment extends Table{
 
     @Override
     public void draw(){
+        boolean forceChat = Core.settings.getBool("forcechat");
         float opacity = Core.settings.getInt("chatopacity") / 100f;
         float textWidth = Math.min(Core.graphics.getWidth()/1.5f, Scl.scl(700f));
 
@@ -269,7 +271,7 @@ public class ChatFragment extends Table{
 
         hoveredButton = null;
         float theight = offsety + spacing + getMarginBottom() + scene.marginBottom;
-        for(int i = scrollPos; i < messages.size && i < messagesShown + scrollPos && (i < fadetime || shown); i++){
+        for(int i = scrollPos; i < messages.size && i < messagesShown + scrollPos && (i < fadetime || shown || forceChat); i++){
             ChatMessage msg = messages.get(i);
 
             layout.setText(font, msg.formattedMessage, Color.white, textWidth, Align.bottomLeft, true);
@@ -288,7 +290,7 @@ public class ChatFragment extends Table{
                 color.a = .8f;
             }
 
-            if(!shown && fadetime - i < 1f && fadetime - i >= 0f){
+            if(!shown && !forceChat && fadetime - i < 1f && fadetime - i >= 0f){
                 font.getCache().setAlphas((fadetime - i) * opacity);
                 Draw.color(color.r, color.g, color.b, shadowColor.a * (fadetime - i) * opacity);
             }else{
@@ -474,7 +476,120 @@ public class ChatFragment extends Table{
 
         checkPing(message);
 
-        handleClientCommand(message);
+        int chatMode = Core.settings.getInt("uchatmode", 0);
+        boolean isCommand = message.startsWith("/") || message.startsWith("!");
+
+        if (chatMode > 0 && mode == ChatMode.normal && !isCommand) {
+            message = applyChatStyle(message, chatMode);
+        }
+
+        if (message.length() > 145 || (chatMode > 0 && !isCommand)) {
+            sendSmartMessage(message);
+        } else {
+            handleClientCommand(message);
+        }
+    }
+
+    private String applyChatStyle(String msg, int mode) {
+        String raw = Strings.stripColors(msg);
+        if (raw.isEmpty()) return msg;
+
+        StringBuilder res = new StringBuilder();
+        int totalLen = raw.length();
+
+        if (mode == 1) {
+            String uColor = Core.settings.getString("uchatcolor", "white");
+            return "[" + uColor + "]" + raw;
+        }
+
+        int step = (totalLen > 60) ? 3 : (totalLen > 20 ? 2 : 1);
+
+        for (int i = 0; i < totalLen; i++) {
+            char c = raw.charAt(i);
+            if (c != ' ' && i % step == 0) {
+                float progress = (float) i / totalLen;
+                if (mode == 2) {
+                    Color col = Tmp.c1.set(Pal.accent).lerp(Color.white, progress);
+                    res.append("[#").append(col.toString(), 0, 6).append("]");
+                } else if (mode == 3) {
+                    Color rc = Tmp.c1.fromHsv(progress * 360f, 0.8f, 1f);
+                    res.append("[#").append(rc.toString(), 0, 6).append("]");
+                } else if (mode == 4) {
+                    int s = (int) (progress * 9);
+                    res.append("[#f").append(s).append(s).append("]");
+                }
+            }
+            res.append(c);
+        }
+        return res.toString();
+    }
+
+    private void sendSmartMessage(String styled) {
+        if (styled.length() <= 150) {
+            handleClientCommand(styled);
+            return;
+        }
+
+        Seq<String> chunks = new Seq<>();
+        StringBuilder current = new StringBuilder();
+        String lastColor = "";
+
+        String[] parts = styled.split("(?=\\[)|(?<=\\])");
+
+        for (String part : parts) {
+            if (part.isEmpty()) continue;
+
+            if (part.startsWith("[") && part.endsWith("]")) {
+                if (current.length() + part.length() > 145) {
+                    chunks.add(current.toString());
+                    current.setLength(0);
+                    if (!lastColor.isEmpty()) current.append(lastColor);
+                }
+                current.append(part);
+                if (part.startsWith("[#") || part.equals("[]")) lastColor = part;
+            }
+            else {
+                String[] words = part.split(" ", -1);
+                for (int i = 0; i < words.length; i++) {
+                    String word = words[i];
+                    String suffix = (i < words.length - 1) ? " " : "";
+
+                    if (current.length() + word.length() + suffix.length() > 145) {
+
+                        if (current.length() > (lastColor.isEmpty() ? 0 : lastColor.length())) {
+                            chunks.add(current.toString());
+                            current.setLength(0);
+                            if (!lastColor.isEmpty()) current.append(lastColor);
+                        }
+
+                        if (word.length() > 140) {
+                            String[] atoms = word.split("(?=\\[)");
+                            for (String atom : atoms) {
+                                if (current.length() + atom.length() > 145) {
+                                    chunks.add(current.toString());
+                                    current.setLength(0);
+                                    if (!lastColor.isEmpty()) current.append(lastColor);
+                                }
+                                current.append(atom);
+                            }
+                        } else {
+                            current.append(word);
+                        }
+                    } else {
+                        current.append(word);
+                    }
+                    current.append(suffix);
+                }
+            }
+        }
+
+        if (current.length() > 0) chunks.add(current.toString());
+
+        for (int i = 0; i < chunks.size; i++) {
+            String s = chunks.get(i).trim();
+            if (s.isEmpty() || s.startsWith("[#") && s.endsWith("]")) continue;
+            Timer.schedule(() -> handleClientCommand(s), i * 1.1f);
+        }
     }
 
     public static CommandHandler.CommandResponse handleClientCommand(String message){
@@ -623,23 +738,34 @@ public class ChatFragment extends Table{
      */
     public ChatMessage addMessage(String message, String sender, Color background, String prefix, String unformatted){
         if(sender == null && message == null) return null;
+
+        if((Core.settings.getBool("hidejoinleave") ||  Core.settings.getBool("shift_nick"))&& sender == null && message != null){
+            String clean = Strings.stripColors(message);
+            if(clean.contains("joined!") || clean.contains("left!") || clean.contains("присоединился") || clean.contains("покинул")){
+                return new ChatMessage(null, null, null, null, null);
+            } else if (clean.contains("Successfully set your name")) {
+                return new ChatMessage(null, null, null, null, null);
+            }
+        }
+
         ChatMessage msg = new ChatMessage(message, sender, background == null ? null : background.cpy(), prefix, unformatted);
-        messages.insert(0, msg);
 
-        if (messages.size >= 100) { // Free up memory by disposing of stuff in old messages
-            var oldMsg = messages.get(99);
-            if (oldMsg.attachments != null) oldMsg.attachments.each(Texture::dispose);
-            oldMsg.attachments = null;
-            oldMsg.buttons = null;
+        if(msg.message != null) {
+            messages.insert(0, msg);
+
+            if (messages.size >= 100) {
+                var oldMsg = messages.get(99);
+                if (oldMsg.attachments != null) oldMsg.attachments.each(Texture::dispose);
+                oldMsg.attachments = null;
+                oldMsg.buttons = null;
+            }
+            if (Core.settings.getBool("enablechatlimit") && messages.size > Core.settings.getInt("chatlimit", 1000)) {
+                messages.pop();
+            }
+            doFade(6);
+            if(scrollPos > 0) scrollPos++;
         }
-
-        if (Core.settings.getBool("enablechatlimit") && messages.size > Core.settings.getInt("chatlimit", 1000)) { // Delete the oldest message when at the chat limit
-            messages.pop();
-        }
-
-        doFade(6); // fadetime was originally incremented by 2f, that works out to 6s
-        if(scrollPos > 0) scrollPos++;
-        return msg;
+        return msg; // Возвращаем объект, чтобы NetClient не упал
     }
 
     /** Alias for {@link #addMessage(String)} that returns a ChatMessage since return type changes are binary incompatible and break mods */
