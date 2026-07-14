@@ -502,7 +502,7 @@ public class DesktopInput extends InputHandler{
         if(!scene.hasField() && !scene.hasDialog()){
             if(input.keyTap(Binding.debugHitboxes)) Core.settings.toggle("drawhitboxes");
 
-            if(input.keyTap(Binding.teleportCursor) && (state.rules.editor || state.rules.infiniteResources)){
+            if(input.keyTap(Binding.teleportCursor) && (state.rules.editor || state.rules.infiniteResources) && !net.client()){
                 if(player.dead()){
                     camera.position.set(input.mouseWorld());
                 }else{
@@ -918,7 +918,13 @@ public class DesktopInput extends InputHandler{
             }
         }
 
-        if(state.isMenu() || Core.scene.hasDialog()) return;
+        if(state.isMenu() || Core.scene.hasDialog()){
+            if(!Core.input.keyDown(Binding.select)) player.shooting = false;
+            if(mode == breaking && !Core.input.keyDown(Binding.breakBlock)) mode = none;
+            if(mode == placing && !Core.input.keyDown(Binding.select)) mode = none;
+
+            return;
+        }
 
         if(!commandMode && input.keyTap(Binding.resetCamera) && scene.getKeyboardFocus() == null && (cursor == null || cursor.build == null || !(cursor.build.block.rotate && cursor.build.block.quickRotate && cursor.build.interactable(player.team()))) && !input.alt()){
             panning = false;
@@ -1399,18 +1405,21 @@ public class DesktopInput extends InputHandler{
             }
 
             if(commandMode && selectedUnits.any()){
-                boolean canAttack = (cursor.build != null && !cursor.build.inFogTo(player.team()) && cursor.build.team != player.team());
+                if(!Core.input.ctrl()){
+                    boolean canAttack = !Core.input.alt() && cursor.build != null && !cursor.build.inFogTo(player.team()) && cursor.build.team != player.team();
 
-                if(!canAttack){
-                    var unit = selectedEnemyUnit(input.mouseWorldX(), input.mouseWorldY());
-                    if(unit != null){
-                        canAttack = selectedUnits.contains(u -> u.canTarget(unit));
+                    if(!canAttack){
+                        var unit = selectedEnemyUnit(input.mouseWorldX(), input.mouseWorldY());
+                        if(unit != null){
+                            canAttack = selectedUnits.contains(u -> u.canTarget(unit));
+                        }
+                    }
+
+                    if(canAttack){
+                        cursorType = ui.targetCursor;
                     }
                 }
 
-                if(canAttack){
-                    cursorType = ui.targetCursor;
-                }
 
                 if(input.keyTap(Binding.commandQueue) && Binding.commandQueue.value.key.type != KeyType.mouse){
                     commandTap(input.mouseX(), input.mouseY(), true);
