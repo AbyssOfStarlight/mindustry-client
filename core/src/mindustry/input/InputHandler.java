@@ -2282,11 +2282,23 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
     protected void updateLine(int x1, int y1, int x2, int y2){
         linePlans.clear();
+        Block old = block;
         if(block.group == BlockGroup.walls && Core.input.shift()) updateWallLine(x1, y1, x2, y2);
         else
-        iterateLine(x1, y1, x2, y2, l -> {
+            if(Core.input.keyDown(Binding.replace_bridge)){        //if(Core.input.alt()){
+                if(old == Blocks.duct){
+                block = (x1 == x2 && y1 == y2) ? Blocks.ductRouter : Blocks.ductBridge;
+            }else if(old == Blocks.conveyor || old == Blocks.titaniumConveyor){
+                block = (x1 == x2 && y1 == y2) ? Blocks.router : Blocks.itemBridge;
+            }else if(old == Blocks.conduit || old == Blocks.pulseConduit){
+                block = (x1 == x2 && y1 == y2) ? Blocks.liquidRouter : Blocks.bridgeConduit;
+            }else if(old == Blocks.reinforcedConduit){
+                block = (x1 == x2 && y1 == y2) ? Blocks.reinforcedLiquidRouter : Blocks.reinforcedBridgeConduit;
+            }
+        }
+        iterateLine(x1, y1, x2, y2, (l) -> {
             rotation = l.rotation;
-            var plan = new BuildPlan(l.x, l.y, l.rotation, block, block.nextConfig());
+            BuildPlan plan = new BuildPlan(l.x, l.y, l.rotation, this.block, this.block.nextConfig());
             plan.animScale = 1f;
             linePlans.add(plan);
         });
@@ -2301,6 +2313,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
             block.handlePlacementLine(linePlans);
         }
+        block = old;
     }
 
     protected void updateLine(int x1, int y1){

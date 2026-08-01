@@ -136,7 +136,8 @@ public class Binding{
     block_show_plans = KeyBind.add("block_show_plans", KeyCode.plus, "fallen"),
     death_show_plans = KeyBind.add("death_show_plans", KeyCode.asterisk, "fallen"),
     deselect_half_units = KeyBind.add("deselect_half_units", KeyCode.j, "fallen"),
-    select_last_units = KeyBind.add("select_last_units", KeyCode.r, "fallen")
+    select_last_units = KeyBind.add("select_last_units", KeyCode.r, "fallen"),
+    replace_bridge = KeyBind.add("replace_bridge", KeyCode.altLeft, "fallen")
 
     ;
 
