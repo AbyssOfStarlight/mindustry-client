@@ -53,6 +53,7 @@ public class ChatFragment extends Table{
     public Seq<Autocompleteable> completion = new Seq<>(); // FINISHME: The autocompletion system is awful.
     private int completionPos = -1;
     private static final Color hoverColor = Color.sky.cpy().mul(0.5f);
+    private static final int CHAT_CHUNK_LIMIT = 130;
 
     public ChatFragment(){
         super();
@@ -483,7 +484,7 @@ public class ChatFragment extends Table{
             message = applyChatStyle(message, chatMode);
         }
 
-        if (message.length() > 145 || (chatMode > 0 && !isCommand)) {
+        if (message.length() > CHAT_CHUNK_LIMIT || (chatMode > 0 && !isCommand)) {
             sendSmartMessage(message);
         } else {
             handleClientCommand(message);
@@ -494,29 +495,39 @@ public class ChatFragment extends Table{
         String raw = Strings.stripColors(msg);
         if (raw.isEmpty()) return msg;
 
-        StringBuilder res = new StringBuilder();
-        int totalLen = raw.length();
-
         if (mode == 1) {
             String uColor = Core.settings.getString("uchatcolor", "white");
+            if (uColor.isEmpty()) uColor = "white";
             return "[" + uColor + "]" + raw;
         }
 
-        int step = (totalLen > 60) ? 3 : (totalLen > 20 ? 2 : 1);
+        Color startColor = null, endColor = null;
+        if (mode == 2) {
+            startColor = parseColorPref("uchatgradientstart", Pal.accent);
+            endColor = parseColorPref("uchatgradientend", Color.white);
+        }
+
+        StringBuilder res = new StringBuilder();
+        int totalLen = raw.length();
+
+        // Настройка: сколько символов подряд красить в один цвет (экономит длину сообщения)
+        int step = Core.settings.getInt("uchatgradientstep", 3);
+        if (step < 1) step = 1;
 
         for (int i = 0; i < totalLen; i++) {
             char c = raw.charAt(i);
-            if (c != ' ' && i % step == 0) {
-                float progress = (float) i / totalLen;
+            if (i % step == 0) {
+                float progress = totalLen > 1 ? (float) i / (totalLen - 1) : 0;
                 if (mode == 2) {
-                    Color col = Tmp.c1.set(Pal.accent).lerp(Color.white, progress);
+                    Color col = Tmp.c1.set(startColor).lerp(endColor, progress);
                     res.append("[#").append(col.toString(), 0, 6).append("]");
                 } else if (mode == 3) {
                     Color rc = Tmp.c1.fromHsv(progress * 360f, 0.8f, 1f);
                     res.append("[#").append(rc.toString(), 0, 6).append("]");
                 } else if (mode == 4) {
                     int s = (int) (progress * 9);
-                    res.append("[#f").append(s).append(s).append("]");
+                    String h = Integer.toHexString(s);
+                    res.append("[#ff").append(h).append(h).append(h).append(h).append("]");
                 }
             }
             res.append(c);
@@ -524,8 +535,17 @@ public class ChatFragment extends Table{
         return res.toString();
     }
 
+    private Color parseColorPref(String key, Color fallback) {
+        String hex = Core.settings.getString(key, "");
+        if (hex == null || hex.isEmpty()) return fallback;
+        try {
+            return Color.valueOf(hex.startsWith("#") ? hex.substring(1) : hex);
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
     private void sendSmartMessage(String styled) {
-        if (styled.length() <= 150) {
+        if (styled.length() <= CHAT_CHUNK_LIMIT) {
             handleClientCommand(styled);
             return;
         }
@@ -534,62 +554,73 @@ public class ChatFragment extends Table{
         StringBuilder current = new StringBuilder();
         String lastColor = "";
 
-        String[] parts = styled.split("(?=\\[)|(?<=\\])");
+        // Делим по пробелам, сохраняя их (через StringTokenizer или простой split)
+        // Чтобы не потерять пробелы, используем лимит -1
+        String[] parts = styled.split("(?<= )|(?= )", -1);
 
         for (String part : parts) {
             if (part.isEmpty()) continue;
 
-            if (part.startsWith("[") && part.endsWith("]")) {
-                if (current.length() + part.length() > 145) {
+            // Проверяем, влезет ли эта часть (слово или пробел) в текущий чанк
+            if (current.length() + part.length() > CHAT_CHUNK_LIMIT) {
+
+                // Если в текущем чанке уже есть какой-то текст (кроме цвета), отправляем его
+                if (current.length() > lastColor.length()) {
                     chunks.add(current.toString());
                     current.setLength(0);
-                    if (!lastColor.isEmpty()) current.append(lastColor);
+                    current.append(lastColor); // Начинаем новый чанк с того же цвета
                 }
-                current.append(part);
-                if (part.startsWith("[#") || part.equals("[]")) lastColor = part;
-            }
-            else {
-                String[] words = part.split(" ", -1);
-                for (int i = 0; i < words.length; i++) {
-                    String word = words[i];
-                    String suffix = (i < words.length - 1) ? " " : "";
 
-                    if (current.length() + word.length() + suffix.length() > 145) {
-
-                        if (current.length() > (lastColor.isEmpty() ? 0 : lastColor.length())) {
-                            chunks.add(current.toString());
+                // Если само "слово" (с цветами) длиннее лимита (бывает при градиенте)
+                if (part.length() > (CHAT_CHUNK_LIMIT - lastColor.length())) {
+                    // Режем слово принудительно по тегам
+                    String[] atoms = part.split("(?=\\[)");
+                    for (String atom : atoms) {
+                        if (current.length() + atom.length() > CHAT_CHUNK_LIMIT) {
+                            if (current.length() > lastColor.length()) chunks.add(current.toString());
                             current.setLength(0);
-                            if (!lastColor.isEmpty()) current.append(lastColor);
+                            current.append(lastColor);
                         }
-
-                        if (word.length() > 140) {
-                            String[] atoms = word.split("(?=\\[)");
-                            for (String atom : atoms) {
-                                if (current.length() + atom.length() > 145) {
-                                    chunks.add(current.toString());
-                                    current.setLength(0);
-                                    if (!lastColor.isEmpty()) current.append(lastColor);
-                                }
-                                current.append(atom);
-                            }
-                        } else {
-                            current.append(word);
-                        }
-                    } else {
-                        current.append(word);
+                        current.append(atom);
+                        updateLastColor(atom, lastColor); // Обновляем цвет, если в атоме был тег
                     }
-                    current.append(suffix);
+                } else {
+                    // Слово не влезло в старый чанк, но влезет в новый
+                    current.append(part);
                 }
+            } else {
+                current.append(part);
             }
+            // Обновляем текущий цвет для следующих чанков
+            lastColor = findLastTag(current.toString(), lastColor);
         }
 
-        if (current.length() > 0) chunks.add(current.toString());
+        if (current.length() > 0 && Strings.stripColors(current.toString()).trim().length() > 0) {
+            chunks.add(current.toString());
+        }
 
+        // Отправка с задержкой
         for (int i = 0; i < chunks.size; i++) {
-            String s = chunks.get(i).trim();
-            if (s.isEmpty() || s.startsWith("[#") && s.endsWith("]")) continue;
-            Timer.schedule(() -> handleClientCommand(s), i * 1.1f);
+            String msg = chunks.get(i);
+            Timer.schedule(() -> handleClientCommand(msg), i * 1.1f);
         }
+    }
+
+    private void updateLastColor(String text, String currentTag) {
+        // Вспомогательная логика не нужна, если мы используем findLastTag ниже
+    }
+
+    // Вспомогательная функция для поиска последнего цветового тега в строке
+    private String findLastTag(String text, String defaultTag) {
+        int lastOpen = text.lastIndexOf('[');
+        if (lastOpen == -1) return defaultTag;
+        int lastClose = text.indexOf(']', lastOpen);
+        if (lastClose == -1 || lastClose <= lastOpen) return defaultTag;
+
+        String tag = text.substring(lastOpen, lastClose + 1);
+        // Если это сброс [], возвращаем пустую строку (белый по умолчанию)
+        if (tag.equals("[]")) return "";
+        return tag;
     }
 
     public static CommandHandler.CommandResponse handleClientCommand(String message){

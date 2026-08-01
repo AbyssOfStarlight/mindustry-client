@@ -575,6 +575,9 @@ public class SettingsMenuDialog extends BaseDialog{
             if(i == 3) return "Радуга";
             return "Оптимизированный Красный";
         });
+        client.textPref("uchatgradientstart", "");
+        client.textPref("uchatgradientend", "");
+        client.sliderPref("uchatgradientstep", 3, 1, 10, 1, String::valueOf);
         client.checkPref("ihateattems", true);
         client.checkPref("assistfixfd", false);
         client.checkPref("alarmgriefblocks", false);
