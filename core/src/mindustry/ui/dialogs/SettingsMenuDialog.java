@@ -555,7 +555,6 @@ public class SettingsMenuDialog extends BaseDialog{
         client.checkPref("unitcontrolalarm", false);
         client.checkPref("unitcontrolselfalarm", false);
         client.sliderPref("unitcontrolalarmcount", 100, 1, 1000, 1, String::valueOf);
-
         client.checkPref("coredeathalarm", true);
         client.checkPref("coredeathalarmrecap", true);
         client.checkPref("playerunitdeathalarm", false);
@@ -566,27 +565,30 @@ public class SettingsMenuDialog extends BaseDialog{
         client.checkPref("resetschetags", false);
         //client.checkPref("steal_map", false);
         //client.checkPref("fd_autofill", false);
-        client.updateUuid();
         client.checkPref("forcechat", false);
-        client.textPref("uchatcolor", "");
-        client.sliderPref("uchatmode", 0, 0, 4, i -> {
-            if(i == 0) return "Выкл";
-            if(i == 1) return "Обычный";
-            if(i == 2) return "Градиент";
-            if(i == 3) return "Радуга";
-            return "Оптимизированный Красный";
-        });
-        client.textPref("uchatgradientstart", "");
-        client.textPref("uchatgradientend", "");
-        client.sliderPref("uchatgradientstep", 3, 1, 10, 1, String::valueOf);
         client.checkPref("ihateattems", true);
         client.checkPref("assistfixfd", false);
         client.checkPref("alarmgriefblocks", false);
         client.sliderPref("alarmgriefblocksbuild", 10, 0, 500, 1, String::valueOf);
         client.sliderPref("alarmgriefblocksbreake", 100, 0, 500, 1, String::valueOf);
-        client.textPref("mynickshifter", "");
 
-
+        if(Core.settings.getBool("OneLoliToRuleThemAll", false)) {
+            client.category("FD_LOLI");
+            client.updateUuid();
+            client.textPref("uchatcolor", "");
+            client.textPref("uchatgradientstart", "");
+            client.textPref("uchatgradientend", "");
+            client.sliderPref("uchatgradientstep", 3, 1, 10, 1, String::valueOf);
+            client.sliderPref("uchatmode", 0, 0, 4, i -> {
+                if(i == 0) return "Выкл";
+                if(i == 1) return "Обычный";
+                if(i == 2) return "Градиент";
+                if(i == 3) return "Радуга";
+                return "Оптимизированный Красный";
+            });
+            client.textPref("mynickshifter", "");
+            client.addGradientNicknameGenerator();
+        }
 
         if (settings.getBool("client-experimentals") || OS.hasProp("policone")) {
             client.category("experimental");
@@ -1150,6 +1152,162 @@ public class SettingsMenuDialog extends BaseDialog{
                 searchBar.requestKeyboard();
             }
             isRebuilding = false;
+        }
+
+
+        private void addGradientNicknameGenerator() {
+            Core.settings.defaults("grad_nick_raw", "Test Nick");
+            Core.settings.defaults("grad_start_hex", "ff0000");
+            Core.settings.defaults("grad_end_hex", "ffffff");
+            Core.settings.defaults("grad_step", 1);
+
+            pref(new Setting("grad_nickname_gen") {
+                Color startC = Color.valueOf(Core.settings.getString("grad_start_hex"));
+                Color endC = Color.valueOf(Core.settings.getString("grad_end_hex"));
+                final String[] result = {""};
+
+                @Override
+                public void add(SettingsTable table) {
+                    table.row();
+                    // Основная панель еще шире для удобства
+                    table.table(Styles.grayPanel, t -> {
+                        t.margin(14);
+                        t.add("Генератор градиента").color(Pal.accent).padBottom(10).row();
+
+                        // 1. Поле ввода
+                        t.table(it -> {
+                            it.add("Текст ника:").left().expandX().row();
+                            it.field(Core.settings.getString("grad_nick_raw"), text -> {
+                                Core.settings.put("grad_nick_raw", text);
+                            }).width(400).height(45);
+                        }).row();
+
+                        // 2. Выбор цветов
+                        t.table(ct -> {
+                            ImageButton bStart = ct.button(Icon.fill, () -> {
+                                Vars.ui.picker.show(startC, res -> {
+                                    startC.set(res);
+                                    Core.settings.put("grad_start_hex", res.toString());
+                                });
+                            }).size(55).get();
+                            bStart.update(() -> bStart.getStyle().imageUpColor = startC);
+
+                            ct.add(" Градиент ").pad(0, 15, 0, 15);
+
+                            ImageButton bEnd = ct.button(Icon.fill, () -> {
+                                Vars.ui.picker.show(endC, res -> {
+                                    endC.set(res);
+                                    Core.settings.put("grad_end_hex", res.toString());
+                                });
+                            }).size(55).get();
+                            bEnd.update(() -> bEnd.getStyle().imageUpColor = endC);
+                        }).padTop(10).row();
+
+                        // 3. Слайдер
+                        t.table(st -> {
+                            st.add("Символов на цвет: ").left();
+                            Label stepLabel = st.add("").color(Pal.accent).width(35).get();
+                            stepLabel.update(() -> stepLabel.setText(String.valueOf(Core.settings.getInt("grad_step"))));
+
+                            st.slider(1, 10, 1, Core.settings.getInt("grad_step"), val -> {
+                                Core.settings.put("grad_step", (int)val);
+                            }).width(200).padLeft(10);
+                        }).width(400).padTop(10).row();
+
+                        // 5. Кнопка Генерации
+                        t.button("Сгенерировать градиент", Icon.refresh, () -> {
+                            result[0] = generateGradient(
+                                    Core.settings.getString("grad_nick_raw"),
+                                    startC,
+                                    endC,
+                                    Core.settings.getInt("grad_step")
+                            );
+                        }).width(400).height(50).padTop(10).color(Pal.accent).row();
+
+                        // 4. Поле ПРЕДВЫБОРА / КОПИРОВАНИЯ
+                        t.add("Нажми, чтобы скопировать:").padTop(20).left().row();
+
+                        TextButton resBtn = t.button("", Styles.flatBordert, () -> {
+                            if(!result[0].isEmpty()){
+                                Core.app.setClipboardText(result[0]);
+                                Vars.ui.showInfoFade("Ник скопирован в буфер!");
+                            }
+                        }).width(400).height(55).get();
+
+                        // Кнопка всегда видна, но меняет текст
+                        resBtn.update(() -> {
+                            if(result[0].isEmpty()){
+                                resBtn.setText("[gray]Тут появится результат...");
+                                resBtn.setDisabled(true);
+                            } else {
+                                resBtn.setText(result[0]);
+                                resBtn.setDisabled(false);
+                            }
+                        });
+                        t.row();
+
+                        // Счетчик символов
+                        t.table(lt -> {
+                            lt.add("").update(l -> {
+                                int len = result[0].length();
+                                if(len == 0) l.setText("");
+                                else {
+                                    l.setText("Длина: " + len + " / 70");
+                                    l.setColor(len > 70 ? Color.scarlet : Color.lightGray);
+                                }
+                            });
+                        }).height(20).row();
+
+
+
+                    }).width(440).pad(10).expandX();
+                    table.row();
+                }
+            });
+        }
+
+        private String generateGradient(String text, Color start, Color end, int step) {
+            if (text == null || text.isEmpty()) return "";
+
+            StringBuilder sb = new StringBuilder();
+            String cleanText = text.replace(" ", "");
+
+            // Если в нике всего 1 буква или шаг больше длины
+            if (cleanText.length() <= 1 || cleanText.length() <= step) {
+                return "[#" + start.toString().substring(0, 6) + "]" + text;
+            }
+
+            int totalBlocks = (int) Math.ceil((double) cleanText.length() / step);
+            int cleanCharIdx = 0;
+
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+
+                if (c == ' ') {
+                    sb.append(c);
+                    continue;
+                }
+
+                if (cleanCharIdx % step == 0) {
+                    // Рассчитываем t от 0.0 до 1.0
+                    float t = (float) (cleanCharIdx / step) / (totalBlocks - 1);
+
+                    // Самый надежный способ lerp для Mindustry
+                    int r = (int) ((start.r + (end.r - start.r) * t) * 255);
+                    int g = (int) ((start.g + (end.g - start.g) * t) * 255);
+                    int b = (int) ((start.b + (end.b - start.b) * t) * 255);
+
+                    sb.append(String.format("[#%02x%02x%02x]",
+                            Math.max(0, Math.min(255, r)),
+                            Math.max(0, Math.min(255, g)),
+                            Math.max(0, Math.min(255, b))));
+                }
+
+                sb.append(c);
+                cleanCharIdx++;
+            }
+
+            return sb.toString();
         }
 
         private void updateUuid() {
