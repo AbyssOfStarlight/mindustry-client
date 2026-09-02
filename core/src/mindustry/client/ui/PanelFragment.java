@@ -9,7 +9,6 @@ import arc.math.Mathf;
 
 import arc.math.geom.Vec2;
 import arc.scene.*;
-import arc.scene.event.ClickListener;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.ui.*;
@@ -20,9 +19,10 @@ import mindustry.*;
 import mindustry.ai.ItemUnitStance;
 import mindustry.ai.UnitCommand;
 import mindustry.ai.UnitStance;
-import mindustry.ai.types.CommandAI;
 import mindustry.client.ClientVars;
 import mindustry.client.fallen.*;
+import mindustry.client.fallen.miners.MinersFDAI;
+import mindustry.client.fallen.miners.MinersSettingsDialog;
 import mindustry.client.navigation.BuildPath;
 import mindustry.client.navigation.MinePath;
 import mindustry.client.navigation.Navigation;
@@ -35,7 +35,6 @@ import mindustry.game.EventType.*;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.graphics.*;
-import mindustry.maps.Map;
 import mindustry.type.*;
 import mindustry.ui.*;
 import mindustry.ui.fragments.ChatFragment;
@@ -57,13 +56,13 @@ import java.util.List;
 
 import static arc.Core.*;
 import static mindustry.Vars.*;
+import static mindustry.client.fallen.miners.MinersFDAI.minePolys;
 
 public class PanelFragment extends Table{
     public Table fdpanel; //Создание интерфейса дял кнопок
     public static Seq<Item> itemtomine = new Seq<>(); //Создание выборки для копания
-    private static boolean minecopper = false, minelead = false, minetitan = false,
-            minesand = false, minecoal = false, minescrap = false;
-    private static boolean mineBerylliumwall, mineGraphiticwall;
+    public static boolean minecopper = false,minelead = false, minetitan = false, minesand = false, minecoal = false, minescrap = false;
+    public static boolean mineBerylliumwall, mineGraphiticwall;
     private float brokenFade = 0f;
     public static int max_length = 146;
     private final IntMap<EffState> effStorage = new IntMap<>();
@@ -100,24 +99,17 @@ public class PanelFragment extends Table{
     public static final Seq<Unit> followers = new Seq<>();
     private static int syncTimer = 0;
 
-    private boolean autoMiningActive = false;
-    private Interval miningTimer = new Interval();
-    public static boolean mineMonos = true;
-    public static boolean minePolys = false;
-    public static boolean minePulss = true;
-    public static boolean mineMegas = true;
-    public static boolean mineQuazs = true;
-    public static boolean autoHealMegas = false;
-    public static float autoHealDist = 50f;
-    public static int minUnitsPerResource = 1;
-    public static int AIMiningUpdateTime = Core.settings.getInt("AIUpTime", 10);
-    boolean isCrisisMode = false;
-    Seq<Item> crisisItems = new Seq<>();
-    public static float crisisThreshold = 0.10f;
     String temp_name = Core.settings.getString("mynickshifter", "nani");
 
 
     public PanelFragment(){ //Основной класс
+
+        Timer.schedule(()->{
+            if (net.client() && Core.settings.getBool("shift_nick", false)){
+                temp_name = shiftColorsRight(temp_name);
+                Call.sendChatMessage("/name " + temp_name);
+            }
+        }, 60f, 300f);
 
         Events.run(Trigger.update, () -> {
             if(!Vars.state.isMenu()) {
@@ -153,15 +145,8 @@ public class PanelFragment extends Table{
                     Call.sendChatMessage("/rtv");
                 }
             }, 5f);
-
-            Timer.schedule(()->{
-                if (net.client() && Core.settings.getBool("shift_nick", false)){
-                    temp_name = shiftColorsRight(temp_name);
-                    Call.sendChatMessage("/name " + temp_name);
-                }
-            }, 60f, 300f);
             rebuild();
-            autoMiningActive = false;
+//            autoMiningActive = false;
             minecopper = true; minelead = true; minetitan = true;
             mineBerylliumwall = true; mineGraphiticwall = true;
             //minesand = false; minecoal = false;
@@ -246,6 +231,7 @@ public class PanelFragment extends Table{
 
     public static void startInit() {
         mindustry.client.fallen.ActivityLogger.init();
+        MinersFDAI.init();
         AntiAttemPatcher.load();
         Log.info("Start init");
     }
@@ -279,28 +265,19 @@ public class PanelFragment extends Table{
                 t.row();
 
                 t.table(tb->{
-                    //tb.button(Icon.commandAttackSmall, sstyle, this::autoAssignMiningUnits).tooltip("Приказать всем копать всё").width(settings.getInt("buttonsizefdpamel", 30)).height(settings.getInt("buttonsizefdpamel", 30) / 2f);
                     tb.button(Icon.wrenchSmall, sstylet, ()->{minePolys = !minePolys;}).tooltip("Переклчюить режим копки полей").update(i -> i.setChecked(minePolys)).width(settings.getInt("buttonsizefdpamel", 30)).height(settings.getInt("buttonsizefdpamel", 30) / 2f);
                     tb.row();
 
                     tb.button(Icon.modeSurvivalSmall, sstylet, () -> {
-                                autoMiningActive = !autoMiningActive;
-                                if (autoMiningActive) {
-                                    autoAssignMiningUnitsEqually();
-                                }
+                                MinersFDAI.autoMiningActive = !MinersFDAI.autoMiningActive;
                             }).update(b -> {
-                                b.setChecked(autoMiningActive);
-
-                                b.getImage().setColor(autoMiningActive ? Color.cyan : Color.white);
-
-                                if (autoMiningActive && miningTimer.get(AIMiningUpdateTime*60f)) {
-                                    autoAssignMiningUnitsEqually();
-                                }
+                                b.setChecked(MinersFDAI.autoMiningActive);
+                                b.getImage().setColor(MinersFDAI.autoMiningActive ? Color.cyan : Color.white);
                             }).tooltip("Автоматически копать руду")
                             .width(settings.getInt("buttonsizefdpamel", 30))
                             .height(settings.getInt("buttonsizefdpamel", 30) / 2f);
-
                 });
+
                 t.table(tb->{
                     tb.defaults().size(settings.getInt("buttonsizefdpamel", 30) / 2f);
                     tb.button(Icon.mapSmall, sstylet, () -> {
@@ -351,15 +328,38 @@ public class PanelFragment extends Table{
 
                 });
 
-                t.button(Icon.distributionSmall, sstyle, () -> {
-                    currentfollowmode = 3;
-                    Navigation.follow(new RepairPath(), true);
-                }).name("healer").tooltip("Heal");
 
-                t.button(Icon.distributionSmall, sstyle, () -> {
-                    currentfollowmode = 2;
-                    Navigation.follow(new BuildPath("self"));
-                }).name("builder").tooltip("Self builder");
+                t.table(tb->{
+                    tb.button(Icon.mapSmall, sstylet, () -> {
+                        MinersFDAI.autoAssistBuild = !MinersFDAI.autoAssistBuild;
+                    }).update(i -> i.setChecked(MinersFDAI.autoAssistBuild)).name("autoAssistBuild")
+                            .tooltip("autoAssistBuild")
+                            .width(settings.getInt("buttonsizefdpamel", 30)).height(settings.getInt("buttonsizefdpamel", 30) / 2f);
+
+                    tb.row();
+
+                    tb.button(Icon.mapSmall, sstylet, () -> {
+                        MinersFDAI.respectManualCommands = !MinersFDAI.respectManualCommands;
+                    }).update(i -> i.setChecked(MinersFDAI.respectManualCommands))
+                            .name("respectManualCommands").tooltip("respectManualCommands")
+                            .width(settings.getInt("buttonsizefdpamel", 30)).height(settings.getInt("buttonsizefdpamel", 30) / 2f);
+                });
+
+
+                t.button(Icon.settingsSmall, sstyle, () -> {
+                    MinersSettingsDialog.get().show();
+                }).name("MinersSettingsDialog").tooltip("MinersSettingsDialog");
+
+
+//                t.button(Icon.distributionSmall, sstyle, () -> {
+//                    currentfollowmode = 3;
+//                    Navigation.follow(new RepairPath(), true);
+//                }).name("healer").tooltip("Heal");
+//
+//                t.button(Icon.distributionSmall, sstyle, () -> {
+//                    currentfollowmode = 2;
+//                    Navigation.follow(new BuildPath("self"));
+//                }).name("builder").tooltip("Self builder");
 
                 t.button(Icon.terminalSmall, sstyle, () -> {
                     eneblemining = !eneblemining;
@@ -460,9 +460,13 @@ public class PanelFragment extends Table{
                     Call.sendChatMessage("/history");
                 }).name("history").tooltip("/history");
 
-                t.button(Icon.rotate, sstyle, () -> {
-                    Call.sendChatMessage("/elite");
-                }).name("elite").tooltip("/elite");
+                if(Core.settings.getBool("OneLoliToRuleThemAll", false)) {
+
+                    t.button(Icon.warningSmall, sstylet, () -> {
+                        temp_name = shiftColorsRight(Core.settings.getString("mynickshifter", "nani"));
+                        Core.settings.put("shift_nick", !Core.settings.getBool("shift_nick"));
+                    }).update(i -> i.setChecked(Core.settings.getBool("shift_nick", false))).name("shift_nick").tooltip("shift_nick");
+                }
 
                 t.row();
 
@@ -477,11 +481,6 @@ public class PanelFragment extends Table{
                 t.button(Icon.cancelSmall, sstylet, () -> {
                     settings.put("ignoreheal", !settings.getBool("ignoreheal"));
                 }).update(i -> i.setChecked(settings.getBool("ignoreheal"))).name("ignoreheal").tooltip("ignoreheal");
-                t.button(Icon.craftingSmall, sstylet, () -> {
-                    AutoTransfer.enabled ^= true;
-                    new Toast(1).add(bundle.get("client.autotransfer") + ": " + bundle.get(AutoTransfer.enabled ? "mod.enabled" : "mod.disabled"));
-                    Core.settings.put("autotransfer", !settings.getBool("autotransfer"));
-                }).update(i -> i.setChecked(settings.getBool("autotransfer"))).name("autotransfer").tooltip("autotransfer");
 
                 t.button(Icon.lineSmall, sstylet, () -> {
                     FDAutoShoot.viewUnitAim = !FDAutoShoot.viewUnitAim;
@@ -514,39 +513,7 @@ public class PanelFragment extends Table{
                 }).update(i -> i.setChecked(settings.getBool("prod-anal"))).name("prod-anal").tooltip("prod-anal");
 
 
-                t.row();
 
-                t.button(Icon.diagonalSmall, sstylet, () -> {
-                    if(!settings.getBool("afkmode")){
-                        eneblemining = true;
-                        startmining();
-                    } else {Navigation.stopFollowing();}
-                    settings.put("afkmode", !settings.getBool("afkmode"));
-                    new Toast(1).add(bundle.get("setting.afkmode.name") + ": " + bundle.get((settings.getBool("afkmode") ? "mod.enabled" : "mod.disabled")));
-                }).update(i -> i.setChecked(settings.getBool("afkmode"))).name("AFK").tooltip("AFK");
-
-                t.button(Icon.cancelSmall, sstylet, () -> {
-                    settings.put("placeSchematicWithCleanup", !settings.getBool("placeSchematicWithCleanup"));
-                }).update(i -> i.setChecked(settings.getBool("placeSchematicWithCleanup"))).name("placeSchematicWithCleanup").tooltip("placeSchematicWithCleanup");
-
-//                t.button(Icon.trelloSmall, sstylet, () -> {
-//                    settings.put("mobilegayming", !settings.getBool("mobilegayming"));
-//                }).update(i -> i.setChecked(settings.getBool("mobilegayming"))).name("mobilegayming").tooltip("mobilegayming");
-
-//                t.button(Icon.trelloSmall, sstylet, () -> {
-//                    settings.put("fd_autofill", !settings.getBool("fd_autofill"));
-//                }).update(i -> i.setChecked(settings.getBool("fd_autofill"))).name("fd_autofill").tooltip("fd_autofill");
-
-                t.button(Icon.chatSmall, sstylet, () -> {
-                    settings.put("unitatchat", !settings.getBool("unitatchat"));
-                }).update(i -> i.setChecked(settings.getBool("unitatchat"))).name("unitatchat").tooltip("unitatchat");
-
-                t.row();
-
-                t.button(Icon.warningSmall, sstylet, () -> {
-                    temp_name = shiftColorsRight(Core.settings.getString("mynickshifter", "nani"));
-                    Core.settings.put("shift_nick", !Core.settings.getBool("shift_nick"));
-                }).update(i -> i.setChecked(Core.settings.getBool("shift_nick", false))).name("shift_nick").tooltip("shift_nick");
 
 
 //                t.button(Icon.mapSmall, sstylet, () -> {
@@ -593,11 +560,72 @@ public class PanelFragment extends Table{
 //                    }).name("ai-settings").tooltip("ai-settings");
 //                }
 
+                t.row();
+
+                t.button(Icon.craftingSmall, sstylet, () -> {
+                    AutoTransfer.enabled = !AutoTransfer.enabled;
+                    new Toast(1).add(bundle.get("client.autotransfer") + ": " + bundle.get(AutoTransfer.enabled ? "mod.enabled" : "mod.disabled"));
+                    Core.settings.put("autotransfer", !settings.getBool("autotransfer"));
+                }).update(i -> i.setChecked(settings.getBool("autotransfer"))).name("autotransfer").tooltip("autotransfer");
+
+                t.button(Icon.turretSmall, sstylet, () -> {
+                            // ГЛАВНОЕ: добавляем "!" перед получением значения
+                            boolean val = !Core.settings.getBool("autotransfer-t-turrets", false);
+                            Core.settings.put("autotransfer-t-turrets", val);
+                            AutoTransfer.Settings.setTargetTurrets(val);
+                        }).update(b -> b.setChecked(Core.settings.getBool("autotransfer-t-turrets", false)))
+                        .tooltip("autotransfer-t-turrets");
+
+                t.button(Icon.productionSmall, sstylet, () -> {
+                            boolean val = !Core.settings.getBool("autotransfer-t-prod", false);
+                            Core.settings.put("autotransfer-t-prod", val);
+                            AutoTransfer.Settings.setTargetProduction(val);
+                        }).update(b -> b.setChecked(Core.settings.getBool("autotransfer-t-prod", false)))
+                        .tooltip("autotransfer-t-prod");
+
+                t.button(Icon.unitsSmall, sstylet, () -> {
+                            boolean val = !Core.settings.getBool("autotransfer-t-units", false);
+                            Core.settings.put("autotransfer-t-units", val);
+                            AutoTransfer.Settings.setTargetUnitFactories(val);
+                        }).update(b -> b.setChecked(Core.settings.getBool("autotransfer-t-units", false)))
+                        .tooltip("autotransfer-t-units");
+
+                t.button(Icon.uploadSmall, sstylet, () -> {
+                            boolean val = !Core.settings.getBool("autotransfer-t-recons", false);
+                            Core.settings.put("autotransfer-t-recons", val);
+                            AutoTransfer.Settings.setTargetReconstructors(val);
+                        }).update(b -> b.setChecked(Core.settings.getBool("autotransfer-t-recons", false)))
+                        .tooltip("autotransfer-t-recons");
+
+
+                t.row();
+
+                t.button(Icon.diagonalSmall, sstylet, () -> {
+                    if(!settings.getBool("afkmode")){
+                        eneblemining = true;
+                        startmining();
+                    } else {Navigation.stopFollowing();}
+                    settings.put("afkmode", !settings.getBool("afkmode"));
+                    new Toast(1).add(bundle.get("setting.afkmode.name") + ": " + bundle.get((settings.getBool("afkmode") ? "mod.enabled" : "mod.disabled")));
+                }).update(i -> i.setChecked(settings.getBool("afkmode"))).name("AFK").tooltip("AFK");
+
+                t.button(Icon.cancelSmall, sstylet, () -> {
+                    settings.put("placeSchematicWithCleanup", !settings.getBool("placeSchematicWithCleanup"));
+                }).update(i -> i.setChecked(settings.getBool("placeSchematicWithCleanup"))).name("placeSchematicWithCleanup").tooltip("placeSchematicWithCleanup");
+
+//                t.button(Icon.trelloSmall, sstylet, () -> {
+//                    settings.put("mobilegayming", !settings.getBool("mobilegayming"));
+//                }).update(i -> i.setChecked(settings.getBool("mobilegayming"))).name("mobilegayming").tooltip("mobilegayming");
+
+                t.button(Icon.chatSmall, sstylet, () -> {
+                    settings.put("unitatchat", !settings.getBool("unitatchat"));
+                }).update(i -> i.setChecked(settings.getBool("unitatchat"))).name("unitatchat").tooltip("unitatchat");
+
 
             }).padTop(Core.settings.getInt("yoffssetfdpamel",  -200) * 1f);
         });
     }
-
+/*
     private void autoAssignMiningUnitsEqually() {
         if (player.unit() == null) return;
         Building core = player.team().core();
@@ -892,7 +920,7 @@ public class PanelFragment extends Table{
             }
         }
     }
-
+*/
     public void updateTriControl() {
         if (!triEnabled || !Vars.state.isGame() || Vars.player.unit() == null) return;
         if(triUnitTypeIndex < 0 || triUnitTypeIndex >= sortedUnitTypes.size) return;
@@ -1003,9 +1031,6 @@ public class PanelFragment extends Table{
         }
     }
 
-    public static void minMinUnitsSet(int min){
-        minUnitsPerResource = min;
-    }
     private void checkspawns() {
         if(!state.hasSpawns()) return;
 

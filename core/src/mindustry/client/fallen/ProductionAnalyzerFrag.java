@@ -5,7 +5,7 @@ import arc.graphics.*;
 import arc.graphics.g2d.TextureRegion;
 import arc.math.Mathf;
 import arc.scene.*;
-import arc.scene.event.Touchable; // Добавлен импорт
+import arc.scene.event.Touchable;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
@@ -34,6 +34,17 @@ public class ProductionAnalyzerFrag extends Table {
     private final ObjectMap<Block, BlockStat> statsMap = new ObjectMap<>();
     private final IntMap<EffState> effStorage = new IntMap<>();
 
+    // Для очистки effStorage от построек, вышедших из выделения / уничтоженных
+    private final IntSet seenIdsThisPass = new IntSet();
+    private final IntSeq staleIdsBuffer = new IntSeq();
+
+    // Throttling пересборки UI: данные считаются каждый вызов updateStats,
+    // но перерисовка виджетов (дорогая по scene2d layout) — не чаще, чем раз в N вызовов,
+    // если набор блоков не поменялся структурно.
+    private int framesSinceRebuild = 0;
+    private static final int REBUILD_EVERY_N_CALLS = 6;
+    private final ObjectSet<Block> lastBlockSet = new ObjectSet<>();
+
     private final float tableWidth = 750f;
     private final float colName = 260f;
     private final float colVal = 100f;
@@ -51,8 +62,9 @@ public class ProductionAnalyzerFrag extends Table {
     }
 
     private static class EffState {
-        float averageEff = 0f; // Сглаженная эффективность
-        float averagePower = -1f; // -1 для инициализации
+        float averageEff = 0f;        // Сглаженная эффективность (аптайм блока)
+        float averagePower = -1f;     // -1 для инициализации: сглаженное производство энергии
+        float averageConsumption = -1f; // -1 для инициализации: сглаженное потребление энергии
     }
 
     public boolean isShown(){
@@ -89,7 +101,11 @@ public class ProductionAnalyzerFrag extends Table {
             }).width(tableWidth).touchable(Touchable.enabled);
         });
 
-        Events.on(EventType.WorldLoadEvent.class, e -> effStorage.clear());
+        Events.on(EventType.WorldLoadEvent.class, e -> {
+            effStorage.clear();
+            lastBlockSet.clear();
+            framesSinceRebuild = 0;
+        });
     }
     private void resetEMA(){
         sumCurP_EMA = 0; sumMaxP_EMA = 0;
@@ -100,6 +116,7 @@ public class ProductionAnalyzerFrag extends Table {
     public void updateStats(int x1, int y1, int x2, int y2) {
         visible = true;
         statsMap.clear();
+        seenIdsThisPass.clear();
         int startX = Math.min(x1, x2), endX = Math.max(x1, x2);
         int startY = Math.min(y1, y2), endY = Math.max(y1, y2);
 
@@ -110,7 +127,42 @@ public class ProductionAnalyzerFrag extends Table {
                 calculateForBuild(b);
             }
         }
-        rebuildUI();
+
+        cleanupStaleEffStates();
+
+        // Определяем, поменялся ли структурно набор блоков (появился/исчез тип) —
+        // в этом случае перерисовываем немедленно, иначе троттлим по частоте.
+        boolean structureChanged = blockSetChanged();
+        framesSinceRebuild++;
+
+        if (structureChanged || framesSinceRebuild >= REBUILD_EVERY_N_CALLS) {
+            framesSinceRebuild = 0;
+            rebuildUI();
+        } else {
+            // Даже без пересборки виджетов дерева, summary-строку с EMA обновляем -
+            // она дешёвая (просто текст), в отличие от полной пересборки contentTable.
+            updateSummaryOnly();
+        }
+    }
+
+    private boolean blockSetChanged() {
+        boolean changed = statsMap.size != lastBlockSet.size;
+        if (!changed) {
+            for (Block b : statsMap.keys()) {
+                if (!lastBlockSet.contains(b)) { changed = true; break; }
+            }
+        }
+        lastBlockSet.clear();
+        for (Block b : statsMap.keys()) lastBlockSet.add(b);
+        return changed;
+    }
+
+    private void cleanupStaleEffStates() {
+        staleIdsBuffer.clear();
+        for (IntMap.Entry<EffState> e : effStorage.entries()) {
+            if (!seenIdsThisPass.contains(e.key)) staleIdsBuffer.add(e.key);
+        }
+        for (int i = 0; i < staleIdsBuffer.size; i++) effStorage.remove(staleIdsBuffer.get(i));
     }
 
     public void hide() { visible = false; }
@@ -119,9 +171,11 @@ public class ProductionAnalyzerFrag extends Table {
         BlockStat st = statsMap.get(b.block, BlockStat::new);
         st.count++;
 
+        seenIdsThisPass.add(b.id);
         EffState state = effStorage.get(b.id, EffState::new);
         float alpha = 0.005f;
-        state.averageEff = Mathf.lerp(state.averageEff, b.efficiency * b.timeScale(), alpha * Time.delta);
+        float t = Math.min(1f, alpha * Time.delta);
+        state.averageEff = Mathf.lerp(state.averageEff, b.efficiency * b.timeScale(), t);
         float realtimeMult = state.averageEff;
 
         // --- 1. ЭНЕРГИЯ ---
@@ -135,10 +189,16 @@ public class ProductionAnalyzerFrag extends Table {
         }
 
         if(state.averagePower < 0) state.averagePower = rawProd;
-        state.averagePower = Mathf.lerp(state.averagePower, rawProd, alpha * Time.delta);
-        st.curPower += (state.averagePower - (usage * (b.power != null ? b.power.status : 0f) * b.timeScale()));
+        state.averagePower = Mathf.lerp(state.averagePower, rawProd, t);
+        float rawConsumption = usage * (b.power != null ? b.power.status : 0f) * b.timeScale();
+        if(state.averageConsumption < 0) state.averageConsumption = rawConsumption;
+        state.averageConsumption = Mathf.lerp(state.averageConsumption, rawConsumption, t);
+        st.curPower += (state.averagePower - state.averageConsumption);
 
         // --- 2. ПОТРЕБЛЕНИЕ ---
+        // Важно: используем cons.efficiency(b) как единственный источник реальной
+        // просадки по конкретному ресурсу — НЕ умножаем дополнительно на realtimeMult,
+        // иначе эффективность возводится в квадрат и потребление занижается.
         for (Consume cons : b.block.consumers) {
             if (cons instanceof ConsumeItems ci) {
                 float duration = 60f;
@@ -149,7 +209,13 @@ public class ProductionAnalyzerFrag extends Table {
                 else if(b.block instanceof OverdriveProjector opj) duration = opj.useTime;
                 else if(b.block instanceof NuclearReactor nr) duration = nr.itemDuration;
                 else if(b.block instanceof ImpactReactor ir) duration = ir.itemDuration;
-                else if(b.block instanceof UnitFactory uf) duration = (b instanceof UnitFactory.UnitFactoryBuild ufb && ufb.currentPlan != -1) ? uf.plans.get(ufb.currentPlan).time : uf.plans.first().time;
+                else if(b.block instanceof UnitFactory uf) {
+                    if (b instanceof UnitFactory.UnitFactoryBuild ufb && ufb.currentPlan != -1 && ufb.currentPlan < uf.plans.size) {
+                        duration = uf.plans.get(ufb.currentPlan).time;
+                    } else if (uf.plans.size > 0) {
+                        duration = uf.plans.first().time;
+                    }
+                }
 
                 float timeFactor = 60f / duration;
                 float consEff = cons.efficiency(b);
@@ -157,14 +223,14 @@ public class ProductionAnalyzerFrag extends Table {
                 for (ItemStack stack : ci.items) {
                     float base = stack.amount * timeFactor;
                     st.maxItems.put(stack.item, st.maxItems.get(stack.item, 0) - base);
-                    st.curItems.put(stack.item, st.curItems.get(stack.item, 0) - (base * realtimeMult * consEff));
+                    st.curItems.put(stack.item, st.curItems.get(stack.item, 0) - (base * consEff));
                 }
             }
 
             if (cons instanceof ConsumeLiquid cl) {
                 float base = cl.amount * 60f;
                 st.maxLiquids.put(cl.liquid, st.maxLiquids.get(cl.liquid, 0) - base);
-                st.curLiquids.put(cl.liquid, st.curLiquids.get(cl.liquid, 0) - (base * realtimeMult * cons.efficiency(b)));
+                st.curLiquids.put(cl.liquid, st.curLiquids.get(cl.liquid, 0) - (base * cons.efficiency(b)));
             }
         }
 
@@ -187,11 +253,9 @@ public class ProductionAnalyzerFrag extends Table {
 
         // RTG Generator
         else if (b.block == Blocks.rtgGenerator) {
-            // Торий (0.07/сек)
             st.maxItems.put(Items.thorium, st.maxItems.get(Items.thorium, 0) - 0.07f);
             if (b.items.has(Items.thorium)) st.curItems.put(Items.thorium, st.curItems.get(Items.thorium, 0) - (0.07f * realtimeMult));
 
-            // Фазовая ткань (0.0047/сек)
             st.maxItems.put(Items.phaseFabric, st.maxItems.get(Items.phaseFabric, 0) - 0.0047f);
             if (b.items.has(Items.phaseFabric)) st.curItems.put(Items.phaseFabric, st.curItems.get(Items.phaseFabric, 0) - (0.0047f * realtimeMult));
         }
@@ -234,15 +298,12 @@ public class ProductionAnalyzerFrag extends Table {
         }
         // Сепараторы
         if (b.block instanceof Separator sep) {
-            // 1. Считаем общую сумму весов (шансов) всех ресурсов
             float totalWeight = 0;
             for (ItemStack stack : sep.results) totalWeight += stack.amount;
 
-            // 2. Считаем количество циклов в секунду
             float craftMult = 60f / sep.craftTime;
 
             for (ItemStack stack : sep.results) {
-                // 3. Средний выход = (Вес ресурса / Общий вес) * Циклы в сек
                 float averageRate = (stack.amount / totalWeight) * craftMult;
 
                 st.maxItems.put(stack.item, st.maxItems.get(stack.item, 0) + averageRate);
@@ -253,11 +314,9 @@ public class ProductionAnalyzerFrag extends Table {
         // БУРЫ (Расчет Max независим от состояния)
         if (b instanceof Drill.DrillBuild drill && drill.dominantItem != null) {
             Drill block = (Drill)b.block;
-            // Теоретический максимум: 60 / время_добычи * кол-во_плиток
             float maxBaseSpeed = 60f / block.getDrillTime(drill.dominantItem) * drill.dominantItems;
 
             st.maxItems.put(drill.dominantItem, st.maxItems.get(drill.dominantItem, 0) + maxBaseSpeed);
-            // Реальное время из поля lastDrillSpeed
             st.curItems.put(drill.dominantItem, st.curItems.get(drill.dominantItem, 0) + (maxBaseSpeed * realtimeMult));
         }
 
@@ -266,8 +325,8 @@ public class ProductionAnalyzerFrag extends Table {
             float totalMultiplier = 0;
             for(int dx = 0; dx < b.block.size; dx++){
                 for(int dy = 0; dy < b.block.size; dy++){
-                    Tile t = world.tile(b.tileX() + dx, b.tileY() + dy);
-                    if(t != null && t.floor().liquidDrop == pump.liquidDrop) totalMultiplier += t.floor().liquidMultiplier;
+                    Tile t2 = world.tile(b.tileX() + dx, b.tileY() + dy);
+                    if(t2 != null && t2.floor().liquidDrop == pump.liquidDrop) totalMultiplier += t2.floor().liquidMultiplier;
                 }
             }
             float baseMax = ((Pump)b.block).pumpAmount * totalMultiplier * 60f;
@@ -276,10 +335,17 @@ public class ProductionAnalyzerFrag extends Table {
         }
     }
 
-    private void rebuildUI() {
-        contentTable.clear();
-        summaryTable.clear();
+    /** Только пересчитывает и обновляет summary-строку без пересборки дерева блоков (дёшево). */
+    private void updateSummaryOnly() {
         if (statsMap.isEmpty()) return;
+        computeSummaryEMA();
+        // summaryTable уже построена rebuildUI ранее; обновляем только числа через ярлыки было бы
+        // сложнее без хранения ссылок на Label, поэтому здесь просто пересобираем саму summary-таблицу -
+        // она значительно дешевле, чем полная contentTable с блоками.
+        rebuildSummaryTableOnly();
+    }
+
+    private void computeSummaryEMA() {
         float rawSumCurP = 0, rawSumMaxP = 0;
         ObjectFloatMap<Item> rawSumCurI = new ObjectFloatMap<>(), rawSumMaxI = new ObjectFloatMap<>();
         ObjectFloatMap<Liquid> rawSumCurL = new ObjectFloatMap<>(), rawSumMaxL = new ObjectFloatMap<>();
@@ -296,49 +362,71 @@ public class ProductionAnalyzerFrag extends Table {
             }
         }
 
-        float a = 0.01f * Time.delta;
+        float a = Math.min(1f, 0.01f * Time.delta);
         sumCurP_EMA = Mathf.lerp(sumCurP_EMA, rawSumCurP, a);
         sumMaxP_EMA = rawSumMaxP;
 
-        // 3. ОТРИСОВКА SUMMARY
+        for (Item item : content.items()) {
+            float rawCur = rawSumCurI.get(item, 0);
+            if (Math.abs(rawCur) < 0.01f && Math.abs(rawSumMaxI.get(item, 0)) < 0.01f) continue;
+            sumCurI_EMA.put(item, Mathf.lerp(sumCurI_EMA.get(item, 0), rawCur, a));
+        }
+        for (Liquid liq : content.liquids()) {
+            float rawCur = rawSumCurL.get(liq, 0);
+            if (Math.abs(rawCur) < 0.01f && Math.abs(rawSumMaxL.get(liq, 0)) < 0.01f) continue;
+            sumCurL_EMA.put(liq, Mathf.lerp(sumCurL_EMA.get(liq, 0), rawCur, a));
+        }
+
+        // Сохраняем raw-max суммы, они нужны rebuildSummaryTableOnly/rebuildUI
+        lastRawSumMaxP = rawSumMaxP;
+        lastRawSumMaxI = rawSumMaxI;
+        lastRawSumMaxL = rawSumMaxL;
+    }
+
+    private float lastRawSumMaxP = 0;
+    private ObjectFloatMap<Item> lastRawSumMaxI = new ObjectFloatMap<>();
+    private ObjectFloatMap<Liquid> lastRawSumMaxL = new ObjectFloatMap<>();
+
+    private void rebuildSummaryTableOnly() {
+        summaryTable.clear();
         summaryTable.left().defaults().padRight(15f).left();
 
         int count = 0;
-        int maxInRow = 4; // Сколько ресурсов в одной строке (увеличили для компактности)
+        int maxInRow = 4;
 
-        // 1. Энергия (Всегда первая)
-        if (Math.abs(rawSumMaxP) > 1) {
-            addSummaryItem(summaryTable, Icon.power.getRegion(), sumCurP_EMA, rawSumMaxP, true);
+        if (Math.abs(lastRawSumMaxP) > 1) {
+            addSummaryItem(summaryTable, Icon.power.getRegion(), sumCurP_EMA, lastRawSumMaxP, true);
             count++;
         }
 
-        // 2. Предметы
         for (Item item : content.items()) {
-            float rawMax = rawSumMaxI.get(item, 0), rawCur = rawSumCurI.get(item, 0);
-            if (Math.abs(rawCur) < 0.01f && Math.abs(rawMax) < 0.01f) continue;
-
-            float emaCur = Mathf.lerp(sumCurI_EMA.get(item, 0), rawCur, a);
-            sumCurI_EMA.put(item, emaCur);
+            float rawMax = lastRawSumMaxI.get(item, 0);
+            float cur = sumCurI_EMA.get(item, 0);
+            if (Math.abs(cur) < 0.01f && Math.abs(rawMax) < 0.01f) continue;
 
             if (count > 0 && count % maxInRow == 0) summaryTable.row();
-            addSummaryItem(summaryTable, item.uiIcon, emaCur, rawMax, false);
+            addSummaryItem(summaryTable, item.uiIcon, cur, rawMax, false);
             count++;
         }
 
-        // 3. Жидкости
         for (Liquid liq : content.liquids()) {
-            float rawMax = rawSumMaxL.get(liq, 0), rawCur = rawSumCurL.get(liq, 0);
-            if (Math.abs(rawCur) < 0.01f && Math.abs(rawMax) < 0.01f) continue;
-
-            float emaCur = Mathf.lerp(sumCurL_EMA.get(liq, 0), rawCur, a);
-            sumCurL_EMA.put(liq, emaCur);
+            float rawMax = lastRawSumMaxL.get(liq, 0);
+            float cur = sumCurL_EMA.get(liq, 0);
+            if (Math.abs(cur) < 0.01f && Math.abs(rawMax) < 0.01f) continue;
 
             if (count > 0 && count % maxInRow == 0) summaryTable.row();
-            addSummaryItem(summaryTable, liq.uiIcon, emaCur, rawMax, false);
+            addSummaryItem(summaryTable, liq.uiIcon, cur, rawMax, false);
             count++;
         }
+    }
 
-        //Расширенная херня
+    private void rebuildUI() {
+        contentTable.clear();
+        if (statsMap.isEmpty()) { summaryTable.clear(); return; }
+
+        computeSummaryEMA();
+        rebuildSummaryTableOnly();
+
         for (var entry : statsMap.entries()) {
             Block block = entry.key;
             BlockStat st = entry.value;
@@ -382,14 +470,11 @@ public class ProductionAnalyzerFrag extends Table {
         table.table(t -> {
             t.image(icon).size(16).padRight(2);
 
-            float w = 65f; // Фиксированная ширина для чисел
-            // Левое число: прижимаем к правому краю ячейки
+            float w = 65f;
             t.add(isPower ? formatPower(cur) : format(cur)).width(w).right();
-            // Слэш: фиксированная ширина по центру
             t.add("[gray]/").width(20f).left();
-            // Правое число: прижимаем к левому краю ячейки
             t.add(isPower ? formatPower(max) : format(max)).width(w).left();
-        }).padRight(10f).padBottom(2f); // Увеличенный отступ между ресурсами
+        }).padRight(10f).padBottom(2f);
     }
 
     private void addRequirementIcons(Table t, Object content, float rate) {
@@ -479,15 +564,9 @@ public class ProductionAnalyzerFrag extends Table {
             }
         }
     }
-    // Считает, сколько предметов в секунду выдает ОДИН ПОЛНЫЙ бур (все тайлы под ним заняты рудой)
     private float getDrillSpeed(Block block, Item item) {
-        if (!(block instanceof Drill drill)) return 0.0001f; // Защита от деления на 0
-
-        // Формула из Drill.java: (drillTime + hardnessMultiplier * item.hardness) / multipliers
+        if (!(block instanceof Drill drill)) return 0.0001f;
         float timePerItem = drill.getDrillTime(item);
-
-        // Переводим время (в кадрах) в скорость (единиц в секунду)
-        // 60 кадров в секунду / время на 1 предмет * количество плиток (size * size)
         return (60f / timePerItem) * (drill.size * drill.size);
     }
 
