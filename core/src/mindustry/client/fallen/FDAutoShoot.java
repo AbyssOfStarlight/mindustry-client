@@ -32,7 +32,7 @@ public class FDAutoShoot {
 
 
     public static void update() {
-        if(player.unit() == null || player.unit().mining() || player.unit().isBuilding()) return;
+        if(player.unit() == null || player.unit().mining() || player.unit().activelyBuilding()) return;
         if (!Core.settings.getBool("smarttargeting", false)) {
             manualTarget = null;
             lastTargetPos = null;

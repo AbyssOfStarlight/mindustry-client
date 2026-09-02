@@ -12,7 +12,6 @@ import arc.struct.*;
 import arc.util.*;
 import mindustry.*;
 import mindustry.client.ClientVars;
-import mindustry.client.ui.PanelFragment;
 import mindustry.client.utils.AutoTransfer;
 import mindustry.gen.*;
 import mindustry.graphics.*;
@@ -191,43 +190,43 @@ public class TrashDialog extends BaseDialog {
 
         addSeparator(Pal.accent);
 
-        all.add("@client.fdtrash.mining").left().padTop(10).row();
-
-        all.table(tt -> {
-            tt.defaults().left().pad(4);
-            addSlider(tt, "@client.fdtrash.minUnitsPerResource", 0, 15, 1,
-                    Core.settings.getFloat("fd-minUMine", 1f),
-                    v -> {
-                        Core.settings.put("fd-minUMine", v);
-                        PanelFragment.minMinUnitsSet(v.intValue());
-                    }, " x");
-
-            addSlider(tt, "@client.fdtrash.crisisThreshold", 1f, 50f, 1f,
-                    PanelFragment.crisisThreshold * 100,
-                    v -> {
-                        PanelFragment.crisisThreshold = v/100;
-                    }, " %");
-            tt.check("@client.fdtrash.mineMonos", PanelFragment.mineMonos, b -> PanelFragment.mineMonos = b).row();
-            tt.check("@client.fdtrash.minePolys", PanelFragment.minePolys, b -> PanelFragment.minePolys = b).row();
-            tt.check("@client.fdtrash.minePulss", PanelFragment.minePulss, b -> PanelFragment.minePulss = b).row();
-            tt.check("@client.fdtrash.mineQuazs", PanelFragment.mineQuazs, b -> PanelFragment.mineQuazs = b).row();
-            tt.check("@client.fdtrash.mineMegas", PanelFragment.mineMegas, b -> PanelFragment.mineMegas = b).row();
-            tt.check("@client.fdtrash.megaAutoHeal", PanelFragment.autoHealMegas, b -> PanelFragment.autoHealMegas = b).row();
-            addSlider(tt, "@client.fdtrash.megadistheal", 10, 500, 10,
-                    PanelFragment.autoHealDist,
-                    v -> {
-                        PanelFragment.autoHealDist = v;
-                    }, " x");
-
-            addSlider(tt, "@client.fdtrash.updatetime", 1, 20, 1,
-                    PanelFragment.AIMiningUpdateTime,
-                    v -> {
-                        PanelFragment.AIMiningUpdateTime = v.intValue();
-                        Core.settings.put("AIUpTime", v.intValue());
-                    }, " x");
-
-
-        }).left().row();
+//        all.add("@client.fdtrash.mining").left().padTop(10).row();
+//
+//        all.table(tt -> {
+//            tt.defaults().left().pad(4);
+//            addSlider(tt, "@client.fdtrash.minUnitsPerResource", 0, 15, 1,
+//                    Core.settings.getFloat("fd-minUMine", 1f),
+//                    v -> {
+//                        Core.settings.put("fd-minUMine", v);
+//                        PanelFragment.minMinUnitsSet(v.intValue());
+//                    }, " x");
+//
+//            addSlider(tt, "@client.fdtrash.crisisThreshold", 1f, 50f, 1f,
+//                    PanelFragment.crisisThreshold * 100,
+//                    v -> {
+//                        PanelFragment.crisisThreshold = v/100;
+//                    }, " %");
+//            tt.check("@client.fdtrash.mineMonos", PanelFragment.mineMonos, b -> PanelFragment.mineMonos = b).row();
+//            tt.check("@client.fdtrash.minePolys", PanelFragment.minePolys, b -> PanelFragment.minePolys = b).row();
+//            tt.check("@client.fdtrash.minePulss", PanelFragment.minePulss, b -> PanelFragment.minePulss = b).row();
+//            tt.check("@client.fdtrash.mineQuazs", PanelFragment.mineQuazs, b -> PanelFragment.mineQuazs = b).row();
+//            tt.check("@client.fdtrash.mineMegas", PanelFragment.mineMegas, b -> PanelFragment.mineMegas = b).row();
+//            tt.check("@client.fdtrash.megaAutoHeal", PanelFragment.autoHealMegas, b -> PanelFragment.autoHealMegas = b).row();
+//            addSlider(tt, "@client.fdtrash.megadistheal", 10, 500, 10,
+//                    PanelFragment.autoHealDist,
+//                    v -> {
+//                        PanelFragment.autoHealDist = v;
+//                    }, " x");
+//
+//            addSlider(tt, "@client.fdtrash.updatetime", 1, 20, 1,
+//                    MinersFDAI.AIMiningUpdateTime,
+//                    v -> {
+//                        MinersFDAI.AIMiningUpdateTime = v.intValue();
+//                        Core.settings.put("AIUpTime", v.intValue());
+//                    }, " x");
+//
+//
+//        }).left().row();
 
         all.add("@client.fdtrash.light").left().padTop(10).row();
         addSeparator(Pal.accent);

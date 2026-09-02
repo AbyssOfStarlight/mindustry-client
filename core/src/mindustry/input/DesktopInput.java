@@ -459,16 +459,15 @@ public class DesktopInput extends InputHandler{
             settings.put("assumeunstrict", !settings.getBool("assumeunstrict"));
         }
 
-        if(input.keyTap(Binding.toggleAutoTarget) && scene.getKeyboardFocus() == null && selectPlans.isEmpty()){
+        if(input.keyTap(Binding.toggleAutoTarget) && scene.getKeyboardFocus() == null){ //&& selectPlans.isEmpty
             if (input.shift()) { // Toggle auto transfer
                 AutoTransfer.enabled ^= true;
                 settings.put("autotransfer", AutoTransfer.enabled);
                 new Toast(1).add(bundle.get("client.autotransfer") + ": " + bundle.get(AutoTransfer.enabled ? "mod.enabled" : "mod.disabled"));
             } else { // Toggle auto target
-                //player.shooting = false;
-                settings.put("smarttargeting", !settings.getBool("smarttargeting"));
-                //settings.put("autotarget", !settings.getBool("autotarget"));
-                new Toast(1).add(bundle.get("setting.autotarget.name") + ": " + bundle.get((settings.getBool("autotarget") ? "mod.enabled" : "mod.disabled")));
+                boolean newState = !settings.getBool("smarttargeting");
+                settings.put("smarttargeting", newState);
+                new Toast(1).add(bundle.get("setting.autotarget.name") + ": " + bundle.get(newState ? "mod.enabled" : "mod.disabled"));
             }
         }
 
@@ -741,6 +740,7 @@ public class DesktopInput extends InputHandler{
                 table.row().fill();
                 table.button("@client.coordsatchat", () -> { // Cursor at chat
                     Call.sendChatMessage(cursor.x + ", " + cursor.y);
+                    Call.pingLocation(Vars.player, cursor.worldx(), cursor.worldy(), null);
                     table.remove();
                 });
 

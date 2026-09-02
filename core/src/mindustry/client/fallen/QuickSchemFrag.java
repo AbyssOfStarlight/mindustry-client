@@ -26,6 +26,9 @@ import static mindustry.Vars.ui;
 
 
 public class QuickSchemFrag extends Table {
+
+    private static final int DEFAULT_TABS_PER_ROW = 6;
+
     private Table container = new Table();
     private Seq<QuickTab> tabs = new Seq<>();
     private int currentTab = 0;
@@ -134,7 +137,7 @@ public class QuickSchemFrag extends Table {
         tabTable.clear();
         tabTable.left().top().defaults().pad(2).size(Core.settings.getFloat("qs-btn-size", 64f));
 
-        int tabsPerRow = Core.settings.getInt("qs-tbs-cols", 10);
+        int tabsPerRow = Core.settings.getInt("qs-tbs-cols", DEFAULT_TABS_PER_ROW);
         int currentInRow = 0;
         boolean dragAdded = false;
 
@@ -220,11 +223,15 @@ public class QuickSchemFrag extends Table {
         container.top().left();
 
         QuickTab tab = tabs.get(currentTab);
-        syncSlots(tab);
+        // syncSlots больше НЕ удаляет лишние слоты — только дополняет недостающие.
+        // Возвращает актуальное кол-во ячеек текущей сетки (cols*rows),
+        // чтобы отрисовать ровно столько, сколько нужно сейчас,
+        // не трогая "спрятанные" слоты сверх этого количества.
+        int totalSlots = syncSlots(tab);
         int cols = Core.settings.getInt("qs-cols", 5);
 
         int count = 0;
-        for (int i = 0; i < tab.slots.size; i++) {
+        for (int i = 0; i < totalSlots; i++) {
             QuickSlot slot = tab.slots.get(i);
             String iconToDraw = slot.iconName;
             boolean isContentToDraw = slot.isContent;
@@ -402,7 +409,7 @@ public class QuickSchemFrag extends Table {
 
             // Настройка колонок
             p.table(t -> {
-                t.label(() -> "Columns: " + Core.settings.getInt("qs-cols", 7)).left().row();
+                t.label(() -> "Columns: " + Core.settings.getInt("qs-cols", 5)).left().row();
                 t.slider(1, 15, 1, Core.settings.getInt("qs-cols", 5), val -> {
                     Core.settings.put("qs-cols", (int)val);
                     rebuild();
@@ -411,29 +418,26 @@ public class QuickSchemFrag extends Table {
 
             // Настройка строк
             p.table(t -> {
-                t.label(() -> "Rows: " + Core.settings.getInt("qs-rows", 5)).left().row();
-                t.slider(1, 15, 1, Core.settings.getInt("qs-rows", 5), val -> {
+                t.label(() -> "Rows: " + Core.settings.getInt("qs-rows", 4)).left().row();
+                t.slider(1, 15, 1, Core.settings.getInt("qs-rows", 4), val -> {
                     Core.settings.put("qs-rows", (int)val);
                     rebuild();
                 }).left().growX();
             }).row();
 
-            try{
-                // Настройка колва вкладок в строку
-                p.table(t -> {
-                    //Core.settings.remove("qs-tbs-cols");
-                    t.label(() -> "Tabs at row: " + Core.settings.getInt("qs-tbs-cols", 6)).left().row();
-                    t.slider(1, 15, 1, Core.settings.getInt("qs-tbs-cols", 6), val -> {
-                        Core.settings.put("qs-tbs-cols", (int)val);
-                        rebuild();
-                    }).left().growX();
-                }).row();
-            }catch (Exception ignored){}
+            // Настройка кол-ва вкладок в строку
+            p.table(t -> {
+                t.label(() -> "Tabs at row: " + Core.settings.getInt("qs-tbs-cols", DEFAULT_TABS_PER_ROW)).left().row();
+                t.slider(1, 15, 1, Core.settings.getInt("qs-tbs-cols", DEFAULT_TABS_PER_ROW), val -> {
+                    Core.settings.put("qs-tbs-cols", (int)val);
+                    rebuildTabs();
+                }).left().growX();
+            }).row();
 
             // Настройка размера кнопок
             p.table(t -> {
-                t.label(() -> "Button Size: " + (int)Core.settings.getFloat("qs-btn-size", 32f)).left().row();
-                t.slider(16, 128, 4, Core.settings.getFloat("qs-btn-size", 32f), val -> {
+                t.label(() -> "Button Size: " + (int)Core.settings.getFloat("qs-btn-size", 64f)).left().row();
+                t.slider(16, 128, 4, Core.settings.getFloat("qs-btn-size", 64f), val -> {
                     Core.settings.put("qs-btn-size", val);
                     rebuild();
                 }).left().growX();
@@ -694,8 +698,20 @@ public class QuickSchemFrag extends Table {
     private void loadData() {
         var file = Vars.dataDirectory.child("quickschems.json");
         if (file.exists()) {
-            try { tabs = json.fromJson(Seq.class, QuickTab.class, file.readString()); } catch (Exception e) { tabs.add(new QuickTab("General")); }
-        } else { tabs.add(new QuickTab("General")); }
+            try {
+                Seq<QuickTab> loaded = json.fromJson(Seq.class, QuickTab.class, file.readString());
+                tabs = loaded != null ? loaded : new Seq<>();
+            } catch (Exception e) {
+                // Если файл повреждён — начинаем с чистого списка,
+                // а не дописываем "General" поверх того, что парсер успел
+                // частично туда положить до исключения.
+                tabs = new Seq<>();
+            }
+        } else {
+            tabs = new Seq<>();
+        }
+
+        if (tabs.isEmpty()) tabs.add(new QuickTab("General"));
     }
 
     private void saveData() {
@@ -713,22 +729,17 @@ public class QuickSchemFrag extends Table {
         pack();
     }
 
-    private void syncSlots(QuickTab tab) {
+    private int syncSlots(QuickTab tab) {
         int cols = Core.settings.getInt("qs-cols", 5);
         int rows = Core.settings.getInt("qs-rows", 4);
         int totalSlots = cols * rows;
 
-        // truncate(n) — встроенный метод Seq, который быстро обрезает список до нужной длины
-        if (tab.slots.size > totalSlots) {
-            tab.slots.truncate(totalSlots);
-        }
-
-        // Добавляем пустые слоты, если их не хватает
         while (tab.slots.size < totalSlots) {
             QuickSlot ns = new QuickSlot();
             ns.iconName = "none";
             ns.isContent = false;
             tab.slots.add(ns);
         }
+        return totalSlots;
     }
 }
