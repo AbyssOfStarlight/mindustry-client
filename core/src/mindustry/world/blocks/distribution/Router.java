@@ -1,13 +1,17 @@
 package mindustry.world.blocks.distribution;
 
+import arc.graphics.g2d.*;
 import arc.math.*;
 import arc.util.*;
 import mindustry.content.*;
 import mindustry.gen.*;
+import mindustry.graphics.*;
 import mindustry.type.*;
 import mindustry.world.*;
 import mindustry.world.blocks.*;
 import mindustry.world.meta.*;
+
+import static mindustry.Vars.*;
 
 public class Router extends Block{
     public float speed = 8f;
@@ -22,8 +26,9 @@ public class Router extends Block{
         group = BlockGroup.transportation;
         unloadable = false;
         noUpdateDisabled = true;
-        drawCached = true;
-        drawDynamic = false;
+        // ВЫКЛЮЧАЕМ КЭШИРОВАНИЕ, чтобы динамически рисовать предметы
+        drawCached = false;
+        drawDynamic = true;
     }
 
     public class RouterBuild extends Building implements ControlBlock{
@@ -31,6 +36,16 @@ public class Router extends Block{
         public Tile lastInput;
         public float time;
         public @Nullable BlockUnitc unit;
+
+        // Массив для хранения времени исчезновения каждого предмета (60 тиков = 1 секунда)
+        public float[] visualTimers = null;
+
+        private float[] getVisualTimers(){
+            if(visualTimers == null || visualTimers.length != content.items().size){
+                visualTimers = new float[content.items().size];
+            }
+            return visualTimers;
+        }
 
         @Override
         public Unit unit(){
@@ -55,6 +70,11 @@ public class Router extends Block{
         public void updateTile(){
             if(lastItem == null && items.any()){
                 lastItem = items.first();
+            }
+
+            // Пока предмет внутри роутера, продлеваем его таймер
+            if(ItemBridge.drawItems && lastItem != null){
+                getVisualTimers()[lastItem.id] = Time.time + 60f;
             }
 
             if(lastItem != null){
@@ -86,6 +106,11 @@ public class Router extends Block{
             lastItem = item;
             time = 0f;
             lastInput = source.tile;
+
+            // Обновляем таймер, когда предмет ВХОДИТ в роутер
+            if(ItemBridge.drawItems){
+                getVisualTimers()[item.id] = Time.time + 60f;
+            }
         }
 
         @Override
@@ -126,6 +151,59 @@ public class Router extends Block{
                 }
             }
             return null;
+        }
+
+        @Override
+        public void draw(){
+            super.draw();
+
+            if(!ItemBridge.drawItems) return;
+
+            float[] timers = getVisualTimers();
+
+            // Считаем количество активных (видимых) предметов
+            int count = 0;
+            for(int i = 0; i < timers.length; i++){
+                if(timers[i] > Time.time) count++;
+            }
+
+            if(count == 0) return;
+
+            Draw.z(Layer.blockOver);
+            Draw.color();
+
+            // Если предмет только один, рисуем его по центру (чуть меньше тайла, чтобы не перекрывать рамку)
+            if(count == 1){
+                for(int i = 0; i < timers.length; i++){
+                    if(timers[i] > Time.time){
+                        Item item = content.item(i);
+                        Draw.rect(item.fullIcon, x, y, tilesize / 2f, tilesize / 2f);
+                        break;
+                    }
+                }
+            } else {
+                // Если предметов несколько, располагаем их сеткой 3x3
+                int index = 0;
+                int maxItems = 9;
+                int columns = 3;
+                float space = tilesize / 3.2f;
+                float size = tilesize / 3.5f;
+
+                for(int i = 0; i < timers.length; i++){
+                    if(timers[i] > Time.time){
+                        Item item = content.item(i);
+                        float col = index % columns - 1;
+                        float row = index / columns - 1;
+                        float ix = x + col * space;
+                        float iy = y + row * space;
+
+                        Draw.rect(item.fullIcon, ix, iy, size, size);
+                        index++;
+                        if(index >= maxItems) break;
+                    }
+                }
+            }
+            Draw.reset();
         }
     }
 }

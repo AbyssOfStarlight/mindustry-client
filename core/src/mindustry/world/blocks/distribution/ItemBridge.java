@@ -44,7 +44,7 @@ public class ItemBridge extends Block{
     public @Nullable ItemBridgeBuild lastBuild;
 
     // Настройки отображения предметов
-    static boolean drawItems = false;
+    public static boolean drawItems = false;
 
     public float drawTime = 120f;
     public static void setDrawItems(boolean draw){

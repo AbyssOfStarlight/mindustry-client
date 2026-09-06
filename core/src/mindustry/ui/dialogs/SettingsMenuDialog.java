@@ -447,6 +447,7 @@ public class SettingsMenuDialog extends BaseDialog{
         client.sliderPref("beamdrillopacity", 100, 0, 100, 1, s -> s + "%");
         client.sliderPref("junctionview", 0, -1, 1, 1, s -> { Junction.setBaseOffset(s); return s == -1 ? "@client.left" : s == 1 ? "@client.right" : "Do not show"; });
         client.sliderPref("itembridgeview", 0, 0, 1, 1, s -> {ItemBridge.setDrawItems(s == 1);return s == 1 ? "Show" : "Do not show";});
+        client.sliderPref("liquidbridgeview", 0, 0, 1, 1, s -> {mindustry.world.blocks.liquid.LiquidBridge.setDrawLiquids(s == 1);return s == 1 ? "Show" : "Do not show";});
         client.sliderPref("spawntime", 5, -1, 60, s -> { ClientVars.spawnTime = 60 * s; if (Vars.pathfinder.thread == null) Vars.pathfinder.start(); return s == -1 ? "Solid Line" : s == 0 ? "@off" : String.valueOf(s); });
         client.sliderPref("traveltime", 10, 0, 60, s -> { ClientVars.travelTime = 60f / s; return s == 0 ? "@off" : String.valueOf(s); });
         client.sliderPref("formationopacity", 30, 10, 100, 5, s -> { UnitType.formationAlpha = s / 100f; return s + "%"; });
