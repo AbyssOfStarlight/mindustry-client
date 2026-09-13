@@ -34,7 +34,16 @@ public class QuickSchemFrag extends Table {
     private int currentTab = 0;
     private Table tabTable;
     private boolean visible = Core.settings.getBool("quickschems", false);
-    private Json json = new Json();
+    private Json json = new Json(){{
+        setIgnoreUnknownFields(true);
+        // Регистрируем класс вкладки и слота со всеми возможными именами
+        addClassTag("mindustry.client.fallen.QuickSchemFrag$QuickTab", QuickTab.class);
+        addClassTag("mindustry.client.fallen.QuickSchemFrag.QuickTab", QuickTab.class);
+        addClassTag("QuickTab", QuickTab.class);
+        addClassTag("QuickSlot", QuickSlot.class);
+
+        setElementType(QuickTab.class, "slots", QuickSlot.class);
+    }};
 
     private float lastX = 0, lastY = 0;
     private boolean centered = false;
@@ -697,21 +706,33 @@ public class QuickSchemFrag extends Table {
 
     private void loadData() {
         var file = Vars.dataDirectory.child("quickschems.json");
+        Log.info("Попытка загрузить quickschems из: @ (существует: @)", file.absolutePath(), file.exists());
+
         if (file.exists()) {
             try {
-                Seq<QuickTab> loaded = json.fromJson(Seq.class, QuickTab.class, file.readString());
-                tabs = loaded != null ? loaded : new Seq<>();
-            } catch (Exception e) {
-                // Если файл повреждён — начинаем с чистого списка,
-                // а не дописываем "General" поверх того, что парсер успел
-                // частично туда положить до исключения.
+                String content = file.readString();
+                Log.info("Прочитано символов из файла: @", content.length());
+
+                Seq<QuickTab> loaded = json.fromJson(Seq.class, QuickTab.class, content);
+                tabs = (loaded != null && loaded.any()) ? loaded : new Seq<>();
+
+                for(QuickTab tab : tabs) {
+                    if(tab != null) tab.validate();
+                }
+                Log.info("Успешно загружено вкладок: @", tabs.size);
+            } catch (Throwable e) {
+                // Выведет точную причину в терминал IDEA
+                Log.err("КРИТИЧЕСКАЯ ОШИБКА ПАРСИНГА quickschems.json", e);
                 tabs = new Seq<>();
             }
         } else {
             tabs = new Seq<>();
         }
 
-        if (tabs.isEmpty()) tabs.add(new QuickTab("General"));
+        if (tabs.isEmpty()) {
+            Log.warn("Список вкладок пуст, создаем General");
+            tabs.add(new QuickTab("General"));
+        }
     }
 
     private void saveData() {
