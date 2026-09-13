@@ -285,6 +285,7 @@ public class Vars implements Loadable{
     public static GlobalVars logicVars;
     public static MapEditor editor;
     public static AvoidanceProcess avoidance;
+    public static PhysicsProcess unitPhysics = new PhysicsProcess();
     public static DataAssetCache assetCache;
     public static GameService service = new GameService();
 
@@ -510,6 +511,7 @@ public class Vars implements Loadable{
         settings.setAutosave(false);
         settings.load();
         if(Core.settings.getBool("debug") || OS.hasProp("debug")) Log.level = Log.LogLevel.debug;
+        Vars.confirmExit = Core.settings.getBool("confirmexit", true);
 
         //this should not be necessary, but in case Binding is initialized before Settings#load(), do that here
         for(KeyBind bind : KeyBind.all){

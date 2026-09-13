@@ -1,7 +1,6 @@
 package mindustry.input;
 
 import arc.*;
-import arc.audio.*;
 import arc.func.*;
 import arc.graphics.*;
 import arc.graphics.g2d.*;
@@ -43,6 +42,7 @@ import mindustry.ui.*;
 import mindustry.ui.fragments.*;
 import mindustry.world.*;
 import mindustry.world.blocks.*;
+import mindustry.world.blocks.environment.*;
 import mindustry.world.blocks.ConstructBlock.*;
 import mindustry.world.blocks.distribution.*;
 import mindustry.world.blocks.logic.*;
@@ -87,6 +87,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
     /** If true, there is a cutscene currently occurring in logic. */
     public boolean logicCutscene;
+    public boolean logicHideHud;
     public Vec2 logicCamPan = new Vec2();
     public float logicCamSpeed = 0.1f;
     public float logicCutsceneZoom = -1f;
@@ -178,15 +179,15 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             }
         });
 
-        Events.on(WorldLoadEvent.class, e -> {
-            playerPlanTree = new QuadTree<>(new Rect(0f, 0f, world.unitWidth(), world.unitHeight()));
-            selectPlanTree = new QuadTree<>(new Rect(0f, 0f, world.unitWidth(), world.unitHeight()));
-            createPlanLists();
-        });
+        Events.on(WorldLoadEvent.class, e -> initQuadtrees());
 
-        Events.on(ResetEvent.class, e -> {
-            reset();
-        });
+        Events.on(ResetEvent.class, e -> reset());
+    }
+
+    protected void initQuadtrees(){
+        playerPlanTree = new QuadTree<>(new Rect(0f, 0f, world.unitWidth(), world.unitHeight()));
+        selectPlanTree = new QuadTree<>(new Rect(0f, 0f, world.unitWidth(), world.unitHeight()));
+        createPlanLists();
     }
 
     //methods to override
@@ -640,6 +641,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                 if(build.block.buildVisibility != BuildVisibility.hidden && build.canPickup() && pay.canPickup(build)){
                     pay.pickup(build);
                 }else{
+                    Sounds.payloadPickup.at(unit, Mathf.random(0.9f, 1.1f));
                     Fx.unitPickup.at(build);
                     build.tile.remove();
                 }
@@ -648,6 +650,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                 if(current != null && pay.canPickupPayload(current)){
                     Payload taken = build.takePayload();
                     if(taken != null){
+                        Sounds.payloadPickup.at(unit, Mathf.random(0.9f, 1.1f));
                         pay.addPayload(taken);
                         Fx.unitPickup.at(build);
                     }
@@ -655,6 +658,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             }
 
         }else if(build != null && onGround){
+            Sounds.payloadPickup.at(unit, Mathf.random(0.9f, 1.1f));
             Fx.unitPickup.at(build);
             build.tile.remove();
         }
@@ -980,10 +984,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     }
 
     public void updateSelectQuadtree(){
-        selectPlanTree.clear();
-        for(var plan : selectPlans){
-            selectPlanTree.insert(plan);
-        }
+        selectPlanTree.fill(selectPlans);
     }
 
     /** Adds an input lock; if this function returns true, input is locked. Used for mod 'cutscenes' or custom camera panning. */
@@ -1011,6 +1012,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
     public void reset(){
         logicCutscene = false;
+        logicHideHud = false;
         commandBuildings.clear();
         selectedUnits.clear();
         itemDepositCooldown = 0f;
@@ -1020,6 +1022,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         queued.clear(51);
         prevs.clear();
         player.shooting = false;
+        player.pingTime = 0f;
     }
 
     public void getSyncedPlans(Seq<BuildPlan> out){
@@ -1273,12 +1276,12 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
                 Teamc attack = null;
                 
-                if(!Core.input.ctrl()){
-                    if(!Core.input.alt()) attack = world.buildWorld(target.x, target.y);
-
-                    if(attack == null || attack.team() == player.team()){
-                        attack = selectedEnemyUnit(target.x, target.y);
-                    }
+                if(!Core.input.modifierDown(Binding.commandNoTargetBuilding)){
+                    attack = world.buildWorld(target.x, target.y);
+                    if(attack != null && attack.team() == player.team()) attack = null;
+                }
+                if(attack == null && !Core.input.modifierDown(Binding.commandNoTargetUnit)){
+                    attack = selectedEnemyUnit(target.x, target.y);
                 }
 
                 int[] ids = new int[selectedUnits.size];
@@ -1347,9 +1350,10 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
         if(commandMode){
             //happens sometimes
-            selectedUnits.removeAll(u -> !u.allowCommand());
+            selectedUnits.removeAll(u -> u.isPlayer());
 
             for(Unit unit : selectedUnits){
+                if(!unit.allowCommand()) continue;
 
                 Color color = unit.controller() instanceof LogicAI ? Team.malis.color : Pal.accent;
 
@@ -1513,10 +1517,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                         plan.animScale = prev.animScale;
                     }
                 }
-                player.previewPlanTree.clear();
-                for(BuildPlan plan : plans){
-                    player.previewPlanTree.insert(plan);
-                }
+                player.previewPlanTree.fill(plans);
             }
 
             BuildPlan current = player.isBuilder() ? player.unit().buildPlan() : null;
@@ -1640,7 +1641,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
     }
 
     public void useSchematic(Schematic schem){
-        useSchematic(schem, true);
+        useSchematic(schem, !state.rules.editor);
     }
 
     public abstract void useSchematic(Schematic schem, boolean checkHidden);
@@ -1703,7 +1704,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             }
             plan.x = World.toTile(wx - plan.block.offset) + ox;
             plan.y = World.toTile(wy - plan.block.offset) + oy;
-            plan.rotation = plan.block.planRotation(Mathf.mod(plan.rotation + direction, 4));
+            
+            plan.block.rotatePlan(plan, direction); //Foo's change, code moved to Block.rotatePlan to allow overriding it for cliffs
         });
     }
 
@@ -2013,7 +2015,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
                 }
             }
 
-            boolean valid = validPlace(plan.x, plan.y, plan.block, plan.rotation, null, true);
+            boolean valid = validPlace(plan.x, plan.y, plan.block, plan.rotation, null, true)
+                || (state.rules.editor && plan.block instanceof OreBlock o && o.wallOre); //Always allow placing wall ores in editor mode, because there might be a wall in the plans that makes it valid
             if(freeze || (force && world.tile(plan.x, plan.y) != null) || valid){
                 BuildPlan copy = plan.copy();
                 if(configLogic && copy.block instanceof LogicBlock && copy.config != null) { // Store the configs for logic blocks locally, they cause issues when sent to the server
@@ -2344,10 +2347,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             if((!config.isShown() && build.shouldShowConfigure(player)) //if the config fragment is hidden, show
             //alternatively, the current selected block can 'agree' to switch config tiles
             || (config.isShown() && config.getSelected().onConfigureBuildTapped(build) && build.shouldShowConfigure(player))){
-                AudioBus oldBus = build.block.configureSound.bus;
-                build.block.configureSound.bus = control.sound.uiBus;
-                build.block.configureSound.at(build);
-                build.block.configureSound.bus = oldBus;
+                build.block.configureSound.at(build.x, build.y, 1f, 1f, control.sound.uiBus);
                 config.showConfig(build);
             }
             //otherwise...
@@ -2654,6 +2654,8 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             config.build(group);
             planConfig.build(group);
         }
+
+        initQuadtrees();
     }
 
     public boolean canShoot(){
@@ -2765,9 +2767,16 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         && !plan.breaking
         && !(vpBlock.canReplace(plan.block) && plan.x == vpX && plan.y == vpY);
 
+    private static final Boolf<BuildPlan> spPredicate = plan ->
+        plan.x == vpX && plan.y == vpY && plan.block == vpBlock;
+
     public boolean validPlace(int x, int y, Block type, int rotation, @Nullable BuildPlan ignore, boolean ignoreUnits){
+        vpBlock = type;
+        vpX = x;
+        vpY = y;
         if(!(ignoreUnits ? Build.validPlaceIgnoreUnits(type, player.team(), x, y, rotation, true, true) : Build.validPlace(type, player.team(), x, y, rotation))){
-            return false;
+            var samePlan = playerPlanTree.find(x * tilesize, y * tilesize, 1, 1, spPredicate);
+            return samePlan != null; //Always allow overriding existing plans, otherwise return false if invalid
         }
 
         if(!player.dead() && player.unit().plans.size > 0){
@@ -2777,9 +2786,6 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
 
             float s = type.size * tilesize;
             vpIgnore = ignore;
-            vpBlock = type;
-            vpX = x;
-            vpY = y;
 
             return playerPlanTree.find(x * tilesize + type.offset - s / 2f, y * tilesize + type.offset - s / 2f, s, s, vpPredicate) == null;
         }
@@ -2927,7 +2933,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
             movement.add(input.mouseWorld().sub(player).scl(1f / 25f * speed)).limit(speed);
         }
 
-        boolean aimCursor = omni && player.shooting && unit.type().hasWeapons() && unit.type().faceTarget && !boosted;
+        boolean aimCursor = omni && player.shooting && unit.type().hasWeapons() && unit.type().faceTarget /*&& !boosted*/;
 
         if(aimCursor){
             unit.lookAt(direction);

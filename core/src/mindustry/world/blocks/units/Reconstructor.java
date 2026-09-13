@@ -182,6 +182,12 @@ public class Reconstructor extends UnitBlock{
         @Override
         public void onCommand(Vec2 target){
             commandPos = target;
+            if(command != null && command.snapToBuilding){
+                var build = world.buildWorld(target.x, target.y);
+                if(build != null && build.team == this.team){
+                    commandPos.set(build);
+                }
+            } 
         }
 
         public float ticksRemaining(){
@@ -196,8 +202,6 @@ public class Reconstructor extends UnitBlock{
         public boolean canSetCommand(){
             var output = unit();
             return output == null || output.allowChangeCommands;
-            // Foos: Allow configuring even without unit
-            // return output != null && output.commands.length > 1;
         }
 
         @Override
@@ -213,11 +217,6 @@ public class Reconstructor extends UnitBlock{
         @Override
         public void buildConfiguration(Table table){
             var unit = unit();
-
-            // if(unit == null){
-            //     deselect();
-            //     return;
-            // }
 
             var group = new ButtonGroup<ImageButton>();
             group.setMinCheckCount(0);

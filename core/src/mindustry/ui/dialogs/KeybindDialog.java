@@ -7,9 +7,11 @@ import arc.input.KeyBind.*;
 import arc.scene.event.*;
 import arc.scene.ui.*;
 import arc.scene.ui.layout.*;
+import arc.struct.*;
 import arc.util.*;
 import mindustry.gen.*;
 import mindustry.graphics.*;
+import mindustry.input.*;
 import mindustry.ui.*;
 
 import java.util.*;
@@ -17,7 +19,6 @@ import java.util.*;
 import static arc.Core.*;
 
 public class KeybindDialog extends Dialog{
-    protected KeyBind rebindKey = null;
     protected boolean rebindAxis = false;
     protected boolean rebindMin = true;
     protected KeyCode minKey = null;
@@ -92,29 +93,29 @@ public class KeybindDialog extends Dialog{
                 lastCategory = keybind.category;
             }
 
-            if(keybind.defaultValue instanceof Axis){
+            if(keybind.defaultValue instanceof Axis a){
+                boolean isAxis = a.min != null;
                 table.add(bundle.get("keybind." + keybind.name + ".name", Strings.capitalize(keybind.name)), Color.white).left().padRight(40).padLeft(8);
 
                 table.labelWrap(() -> {
                     Axis axis = keybind.value;
-                    return axis.key != null ? axis.key.getName() : axis.min.getName() + " [red]/[] " + axis.max.getName();
+                    return Seq.with(keybind.value.modifiers).toString("", m -> m.getModifierName() + " + ") + (axis.key != null ? axis.key.getName() : axis.min.getName() + " [red]/[] " + axis.max.getName());
                 }).color(Pal.accent).left().minWidth(90).fillX().padRight(20);
 
                 table.button("@settings.rebind", tstyle, () -> {
-                    rebindAxis = true;
-                    rebindMin = true;
+                    rebindAxis = isAxis;
+                    rebindMin = isAxis;
                     openDialog(keybind);
                 }).size(bw, bh);
                 table.button("@client.settings.unbind", tstyle, () -> {
-                    rebindAxis = true;
-                    rebindMin = true;
-                    rebindKey = keybind;
+                    rebindAxis = isAxis;
+                    rebindMin = isAxis;
                     rebind(keybind, KeyCode.unset);
-                }).size(bw, bh).padLeft(4f).disabled(t -> keybind.value.min == KeyCode.unset);
+                }).size(bw, bh).padLeft(4f).disabled(isAxis ? t -> keybind.value.min == KeyCode.unset : t -> keybind.value.key == KeyCode.unset);
             }else{
                 table.add(bundle.get("keybind." + keybind.name + ".name", Strings.capitalize(keybind.name)), Color.white).left().padRight(40).padLeft(8);
                 table.add(keybind.value.key.getName()).update(l -> {
-                    l.setText(keybind.value.key.getName());
+                    l.setText(Seq.with(keybind.value.modifiers).toString("", m -> m.getModifierName() + " + ") + keybind.value.key.getName());
                     l.setColor(keybind.value.key == KeyCode.unset ? Color.darkGray : Pal.accent);
                 }).color(Pal.accent).left().minWidth(90).padRight(20);
 
@@ -127,11 +128,10 @@ public class KeybindDialog extends Dialog{
                 table.button("@client.settings.unbind", tstyle, () -> {
                     rebindAxis = false;
                     rebindMin = false;
-                    rebindKey = keybind;
                     rebind(keybind, KeyCode.unset);
                 }).size(bw, bh).padLeft(4f).disabled(t -> keybind.value.key == KeyCode.unset);
             }
-            table.button("@settings.resetKey", tstyle, keybind::resetToDefault).disabled(t -> keybind.isDefault()).size(bw, bh).pad(2f).padLeft(4f);
+            if(keybind != Binding.menu) table.button("@settings.resetKey", tstyle, keybind::resetToDefault).disabled(t -> keybind.isDefault()).size(bw, bh).pad(2f).padLeft(4f);
             table.row();
         }
 
@@ -139,48 +139,91 @@ public class KeybindDialog extends Dialog{
     }
 
     void rebind(KeyBind bind, KeyCode newKey){
-        if(rebindKey == null) return;
+        rebind(bind, new Seq(0), newKey);
+    }
+    void rebind(KeyBind bind, Seq<KeyCode> pressedKeys){
+        //The last one pressed is always the main key
+        KeyCode main = pressedKeys.pop(() -> KeyCode.unset);
+        rebind(bind, pressedKeys, main);
+    }
+    
+    void rebind(KeyBind bind, Seq<KeyCode> modifiers, KeyCode newKey){
         if(rebindDialog != null) rebindDialog.hide();
-        boolean isAxis = bind.defaultValue instanceof Axis;
+        boolean isAxis = bind.defaultValue instanceof Axis axis && axis.min != null;
 
         if(isAxis){
             if(newKey.axis || !rebindMin){
+                if(newKey == minKey) newKey = KeyCode.unset; //if the user enters the same key for both sides of the axis, set the up side to unset. this keeps the same behavior as previous but stores more sensible data.
                 bind.value = newKey.axis ? new Axis(newKey) : new Axis(minKey, newKey);
             }
         }else{
             bind.value = new Axis(newKey);
         }
+        if(modifiers.any()) bind.value.modifiers = modifiers.toArray(KeyCode.class);
+        else bind.value.clearModifiers();
+
         bind.save();
 
         if(rebindAxis && isAxis && rebindMin && !newKey.axis){
             rebindMin = false;
             minKey = newKey;
             if (newKey == KeyCode.unset) rebind(bind, newKey); // unbind the axis
-            else openDialog(rebindKey);
+            else openDialog(bind);
         }else{
-            rebindKey = null;
             rebindAxis = false;
         }
     }
 
-    private void openDialog( KeyBind name){
-        rebindDialog = new Dialog(rebindAxis ? bundle.get("keybind.press.axis") : bundle.get("keybind.press"));
+    private void openDialog(KeyBind keyBind){
+        Seq<KeyCode> pressedKeys = new Seq<>(3);
 
-        rebindKey = name;
+        InputListener blocker = new InputListener(){
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button){
+                event.cancel();
+                return true;
+            }
+        };
+
+        float bw = 210f, bh = 64f;
+        rebindDialog = new Dialog(bundle.get("keybind." + keyBind.name + ".name", Strings.capitalize(keyBind.name))){{
+            title.setAlignment(Align.center);
+            cont.label(() -> pressedKeys.any() ?
+                "\n[accent]" + pressedKeys.toString(" + ", KeyCode::getModifierName)
+                : (rebindAxis ? bundle.get("keybind.press.axis") : bundle.get("keybind.press"))).pad(40f);
+
+            buttons.button("@back", Icon.left, this::hide).size(bw, bh).get().addListener(blocker);
+            buttons.button("@settings.unbindKey", Icon.cancel, () -> {
+                keyBind.unset();
+                keyBind.save();
+                hide();
+            }).size(bw, bh).get().addListener(blocker);
+        }};
 
         rebindDialog.titleTable.getCells().first().pad(4);
         rebindDialog.addListener(new InputListener(){
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button){
                 if(Core.app.isAndroid()) return false;
-                rebind(name, button);
+                rebindDialog.hide();
+                pressedKeys.add(button);
+                rebind(keyBind, pressedKeys);
+                return false;
+            }
+
+            @Override
+            public boolean keyUp(InputEvent event, KeyCode keycode){
+                //Doesn't matter which key was released as long as it's one of the pressed keys
+                if(pressedKeys.contains(keycode)){
+                    rebindDialog.hide();
+                    rebind(keyBind, pressedKeys);
+                }
                 return false;
             }
 
             @Override
             public boolean keyDown(InputEvent event, KeyCode keycode){
-                rebindDialog.hide();
-                rebind(name, keycode);
+                pressedKeys.add(keycode);
                 return false;
             }
 
@@ -188,7 +231,8 @@ public class KeybindDialog extends Dialog{
             public boolean scrolled(InputEvent event, float x, float y, float amountX, float amountY){
                 if(!rebindAxis) return false;
                 rebindDialog.hide();
-                rebind(name, KeyCode.scroll);
+                pressedKeys.add(KeyCode.scroll);
+                rebind(keyBind, pressedKeys);
                 return false;
             }
         });

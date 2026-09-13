@@ -36,9 +36,13 @@ public class ItemBridge extends Block{
     public boolean fadeIn = true;
     public boolean moveArrows = true;
     public boolean pulse = false;
+    /** If true, only allows this bridge to link with the same block type. Otherwise this can link with any ItemBridge. */
+    public boolean linkSameType = true;
     public float arrowSpacing = 4f, arrowOffset = 2f, arrowPeriod = 0.4f;
     public float arrowTimeScl = 6.2f;
     public float bridgeWidth = 6.5f;
+    /** If true, this bridge will not accept items or liquids when disabled. */
+    public boolean noAcceptDisabled = false;
 
     //for autolink
     public @Nullable ItemBridgeBuild lastBuild;
@@ -68,6 +72,7 @@ public class ItemBridge extends Block{
         //disabled as to not be annoying
         allowConfigInventory = true;
         ignoreResizeConfig = true;
+        diagonalConfigInventory = true;
         priority = TargetPriority.transport;
         delayLandingConfig = true;
 
@@ -81,7 +86,7 @@ public class ItemBridge extends Block{
     }
 
     @Override
-    public void setStats() {
+    public void setStats(){
         super.setStats();
         if(transportTime != 0f){
             stats.add(Stat.itemsMoved, 60f / transportTime, StatUnit.itemsSecond);
@@ -115,15 +120,15 @@ public class ItemBridge extends Block{
         Tmp.v1.set(ox, oy).sub(req.drawx(), req.drawy()).setLength(tilesize/2f);
 
         Lines.line(
-                bridgeRegion,
-                req.drawx() + Tmp.v1.x,
-                req.drawy() + Tmp.v1.y,
-                ox - Tmp.v1.x,
-                oy - Tmp.v1.y, false
+        bridgeRegion,
+        req.drawx() + Tmp.v1.x,
+        req.drawy() + Tmp.v1.y,
+        ox - Tmp.v1.x,
+        oy - Tmp.v1.y, false
         );
 
         Draw.rect(arrowRegion, (req.drawx() + ox) / 2f, (req.drawy() + oy) / 2f,
-                Angles.angle(req.drawx(), req.drawy(), ox, oy) + flip);
+        Angles.angle(req.drawx(), req.drawy(), ox, oy) + flip);
 
         Draw.reset();
     }
@@ -136,10 +141,10 @@ public class ItemBridge extends Block{
 
         for(int i = 0; i < 4; i++){
             Drawf.dashLine(Pal.placing,
-                    x * tilesize + Geometry.d4[i].x * (tilesize / 2f + 2),
-                    y * tilesize + Geometry.d4[i].y * (tilesize / 2f + 2),
-                    x * tilesize + Geometry.d4[i].x * (range) * tilesize,
-                    y * tilesize + Geometry.d4[i].y * (range) * tilesize);
+            x * tilesize + Geometry.d4[i].x * (tilesize / 2f + 2),
+            y * tilesize + Geometry.d4[i].y * (tilesize / 2f + 2),
+            x * tilesize + Geometry.d4[i].x * (range) * tilesize,
+            y * tilesize + Geometry.d4[i].y * (range) * tilesize);
         }
 
         Draw.reset();
@@ -161,18 +166,28 @@ public class ItemBridge extends Block{
     }
 
     public boolean linkValid(Tile tile, Tile other, boolean checkDouble){
-        if(other == null || tile == null || !positionsValid(tile.x, tile.y, other.x, other.y)) return false;
+        if(other == null || tile == null || !positionsValid(tile.x, tile.y, other.x, other.y, linkSameType ? range
+            : Math.max(tile.block() instanceof ItemBridge bt ? bt.range : range, other.block() instanceof ItemBridge bo ? bo.range : range))) return false;
+        if(!linkSameType){
+            //false if at least 1 module isn't  shared
+            if(!(tile.block().hasItems && other.block().hasItems) && !(tile.block().hasLiquids && other.block().hasLiquids)) return false;
+        }
 
-        return ((other.block() == tile.block() && tile.block() == this) || (!(tile.block() instanceof ItemBridge) && other.block() == this))
-                && (other.team() == tile.team() || tile.block() != this)
-                && (!checkDouble || ((ItemBridgeBuild)other.build).link != tile.pos());
+        return ((linkSameType ? other.block() == tile.block() && tile.block() == this : (other.block() instanceof ItemBridge && tile.block() instanceof ItemBridge))
+            || (!(tile.block() instanceof ItemBridge) && other.block() == this))
+            && (other.team() == tile.team() || tile.block() != this)
+            && (!checkDouble || ((ItemBridgeBuild)other.build).link != tile.pos());
     }
 
     public boolean positionsValid(int x1, int y1, int x2, int y2){
+        return positionsValid(x1, y1, x2, y2, range);
+    }
+
+    public boolean positionsValid(int x1, int y1, int x2, int y2, int baseRange){
         if(x1 == x2){
-            return Math.abs(y1 - y2) <= range;
+            return Math.abs(y1 - y2) <= baseRange;
         }else if(y1 == y2){
-            return Math.abs(x1 - x2) <= range;
+            return Math.abs(x1 - x2) <= baseRange;
         }else{
             return false;
         }
@@ -199,12 +214,12 @@ public class ItemBridge extends Block{
         for(int i = 0; i < plans.size; i++){
             var cur = plans.get(i);
             var next = plans.get(Math.min(
-                    shift ?
-                            phaseWeaveInterval > 1 && i + range >= plans.size ?
-                                    plans.size - 1 - (plans.size - i - 1) % phaseWeaveInterval : // Multiweave for phase
-                                    i + range : // Normal weaving - Link as far down as possible
-                            i + 1, // No weaving - Link to next only
-                    plans.size - 1));
+                shift ?
+                    phaseWeaveInterval > 1 && i + range >= plans.size ?
+                        plans.size - 1 - (plans.size - i - 1) % phaseWeaveInterval : // Multiweave for phase
+                        i + range : // Normal weaving - Link as far down as possible
+                    i + 1, // No weaving - Link to next only
+                plans.size - 1));
             if(positionsValid(cur.x, cur.y, next.x, next.y) && (shift || !cur.samePos(next))){
                 cur.config = new Point2(next.x - cur.x, next.y - cur.y);
             }
@@ -461,10 +476,10 @@ public class ItemBridge extends Block{
             Tmp.v1.set(x, y).sub(other.worldx(), other.worldy()).setLength(tilesize/2f).scl(-1f);
 
             Lines.line(bridgeRegion,
-                    x + Tmp.v1.x,
-                    y + Tmp.v1.y,
-                    other.worldx() - Tmp.v1.x,
-                    other.worldy() - Tmp.v1.y, false);
+            x + Tmp.v1.x,
+            y + Tmp.v1.y,
+            other.worldx() - Tmp.v1.x,
+            other.worldy() - Tmp.v1.y, false);
 
             int dist = Math.max(Math.abs(other.x - tile.x), Math.abs(other.y - tile.y)) - 1;
 
@@ -476,9 +491,9 @@ public class ItemBridge extends Block{
                 for(int a = 0; a < arrows; a++){
                     Draw.alpha(Mathf.absin(a - time / arrowTimeScl, arrowPeriod, 1f) * warmup * Renderer.bridgeOpacity * Lod.alpha1);
                     Draw.rect(arrowRegion,
-                            x + dx * (tilesize / 2f + a * arrowSpacing + arrowOffset),
-                            y + dy * (tilesize / 2f + a * arrowSpacing + arrowOffset),
-                            i * 90f);
+                    x + dx * (tilesize / 2f + a * arrowSpacing + arrowOffset),
+                    y + dy * (tilesize / 2f + a * arrowSpacing + arrowOffset),
+                    i * 90f);
                 }
             }
 
@@ -542,7 +557,7 @@ public class ItemBridge extends Block{
 
         @Override
         public boolean acceptItem(Building source, Item item){
-            return hasItems && team == source.team && items.total() < itemCapacity && checkAccept(source, world.tile(link));
+            return hasItems && team == source.team && items.total() < itemCapacity && checkAccept(source, world.tile(link)) && (!noAcceptDisabled || enabled);
         }
 
         @Override
@@ -553,9 +568,9 @@ public class ItemBridge extends Block{
         @Override
         public boolean acceptLiquid(Building source, Liquid liquid){
             return
-                    hasLiquids && team == source.team &&
-                            (liquids.current() == liquid || liquids.get(liquids.current()) < 0.2f) &&
-                            checkAccept(source, world.tile(link));
+                hasLiquids && team == source.team && (!noAcceptDisabled || enabled) &&
+                (liquids.current() == liquid || liquids.get(liquids.current()) < 0.2f) &&
+                checkAccept(source, world.tile(link));
         }
 
         protected boolean checkAccept(Building source, Tile link){

@@ -706,6 +706,7 @@ public class BlockRenderer{
                     }
 
                     queuedCacheIndices[layer].each(spriteCacheIndex -> {
+                        Draw.flush();
                         SpriteCache sprites = caches[layer].get(spriteCacheIndex);
                         IntSeq cachesToDraw = queuedCacheDraws[layer].get(spriteCacheIndex);
                         sprites.begin(false);
@@ -752,7 +753,7 @@ public class BlockRenderer{
                             build.wasVisible = true;
                             updateShadow(build);
                             renderer.minimap.update(tile);
-                            build.wasVisible = true;
+                            if(block.drawCached) build.recache();
                         }
                     }
 

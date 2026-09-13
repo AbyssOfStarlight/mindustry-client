@@ -34,19 +34,21 @@ object TileRecords {
 
             ClientVars.lastServerStartTime = startTime
             ClientVars.lastServerName = Vars.state.map.name()
-            if (!ClientVars.syncing && !sameMap) {
-                if(!PanelFragment.forcesavelogs) {
-                    records = Array(Vars.world.width()) { x -> Array(Vars.world.height()) { y -> TileRecord(x, y) } }
-                    joinTime = Instant.now()
-                    ActionsHistory.clearactionhistory()
+            if (!ClientVars.syncing) {
+                if (!sameMap) {
+                    if(!PanelFragment.forcesavelogs) {
+                        records = Array(Vars.world.width()) { x -> Array(Vars.world.height()) { y -> TileRecord(x, y) } }
+                        joinTime = Instant.now()
+                        ActionsHistory.clearactionhistory()
+                    }
                 }
+                NetworkTileLogs.onWorldLoad(sameMap)
             }
         }
 
         Events.on(EventType.BlockBuildBeginEventBefore::class.java) {
             val unit = it.unit ?: return@on
             if (it.newBlock == null || it.newBlock == Blocks.air) {
-                //if(unit.isPlayer) {addLogH(TileBreakLog(it.tile, unit.toInteractor(), it.tile.block()))}
                 if(unit.isPlayer) {addLogH(TileBreakLog(unit.toInteractor(), it.tile.block()))}
                 it.tile.getLinkedTiles { tile ->
                     addLog(tile, TileBreakLog(it.unit.toInteractor(), tile.block()))
@@ -55,7 +57,9 @@ object TileRecords {
                 if(unit.isPlayer) {addLogH(TilePlacedLog(unit.toInteractor(), it.newBlock, -1, null, it.tile == it.tile))}
                 it.tile.getLinkedTilesAs(it.newBlock) { tile ->
                     val log = TilePlacedLog(it.unit.toInteractor(), it.newBlock, it.rotation, null, tile == it.tile)
-                    addLog(tile, log)
+                    addLog(tile, log)?.apply {
+                        team = it.team
+                    }
                 }
             }
         }
@@ -88,7 +92,6 @@ object TileRecords {
                 }
             }
         }
-
 
         Events.on(EventType.BuildPayloadPickup::class.java) {
             it.tile.getLinkedTiles { tile ->
@@ -166,7 +169,6 @@ object TileRecords {
         addHistoryLog(log)
     }
     private fun addHistoryLog(log: TileLog){
-        //if(log.toShortString().contains(Core.bundle.get("client.destroyed"))){return}
         if(history.size>7){
             history.removeAt(0)
         }

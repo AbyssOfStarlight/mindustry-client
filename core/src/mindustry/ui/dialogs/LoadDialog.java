@@ -105,17 +105,17 @@ public class LoadDialog extends BaseDialog{
 
         Time.runTask(2f, () -> Core.scene.setScrollFocus(pane));
 
-        int maxwidth = Math.max((int)(Core.graphics.getWidth() / Scl.scl(470)), 1);
+        int cols = Math.max((int)(Core.graphics.getWidth() / Scl.scl(470)), 1);
 
         if(!control.saves.loading){ // Start an async load if we haven't yet done so
             control.saves.load(false, s -> {
                 if(!visible) return;
-                if(s != null && addSlot(s, count[0], maxwidth)) count[0]++;
+                if(s != null && addSlot(s, count[0], cols)) count[0]++;
                 else if (s == null) rebuild(); // Ensures that ordering is correct based on last played timestamp and not file last modified timestamp.
             });
         }else{
             for(SaveSlot slot : control.saves.getSaveSlots().sort(s -> -s.getTimestamp())){
-                if(addSlot(slot, count[0], maxwidth)) count[0]++;
+                if(addSlot(slot, count[0], cols)) count[0]++;
             }
             if(count[0] == 0) slots.add("@save.none");
         }
@@ -194,7 +194,7 @@ public class LoadDialog extends BaseDialog{
 
         button.table(meta -> {
             meta.left().top();
-            meta.defaults().padBottom(-2).left().width(290f);
+            meta.defaults().padBottom(-2).left().width(280f);
             meta.row();
             meta.labelWrap(Core.bundle.format("save.map", color + (slot.getMap() == null ? Core.bundle.get("unknown") : slot.getMap().name())));
             meta.row();
@@ -206,7 +206,7 @@ public class LoadDialog extends BaseDialog{
             meta.row();
             meta.labelWrap(color + slot.getDate());
             meta.row();
-        }).left().growX().width(250f);
+        }).left().growX().width(260f);
 
         modifyButton(button, slot);
 

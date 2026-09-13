@@ -4,7 +4,6 @@ import arc.*;
 import arc.files.*;
 import arc.func.*;
 import arc.graphics.*;
-import arc.graphics.Texture.*;
 import arc.graphics.g2d.*;
 import arc.input.*;
 import arc.math.*;
@@ -51,7 +50,6 @@ public class SchematicsDialog extends BaseDialog{
 
     public SchematicsDialog(){
         super("@schematics");
-        Core.assets.load("sprites/schematic-background.png", Texture.class).loaded = t -> t.setWrap(TextureWrap.repeat);
 
         tags = Core.settings.getJson("schematic-tags", Seq.class, String.class, Seq::new);
 
@@ -162,8 +160,6 @@ public class SchematicsDialog extends BaseDialog{
                         control.input.useSchematic(firstSchematic);
                         hide();
                     }
-                    control.input.useSchematic(firstSchematic);
-                    hide();
                 }
             });
 
@@ -376,6 +372,20 @@ public class SchematicsDialog extends BaseDialog{
 
         dialog.addCloseButton();
         dialog.show();
+    }
+
+    public void importAndShow(Fi file){
+        try{
+            Schematic s = Schematics.read(file);
+            s.removeSteamID();
+            schematics.add(s);
+            checkTags(s);
+
+            setup();
+            showInfo(s);
+        }catch(Exception e){
+            ui.showException(e);
+        }
     }
 
     public void showExport(Schematic s){

@@ -24,7 +24,7 @@ class Moderation {
         @JvmField var muteState: Boolean = false
         init {
             Vars.netClient.addPacketHandler("playerdata") { // Handles autostats from plugins FINISHME: This is server-specific code. Treat it as such.
-                if (Server.io() || Server.phoenix() || Server.corium()) {
+                if (Server.io() || Server.corium()) {
                     val json = JsonReader().parse(it)
                     if (Core.settings.getBool("logplayerdata")) Log.debug(json)
 
@@ -128,16 +128,18 @@ class Moderation {
             Vars.player.sendMessage("[scarlet]${player.name} [scarlet]has joined ${info.timesJoined-1} times before, they have been kicked ${info.timesKicked} times")
         }
 
-        // These next three lines are the laziest way of deduplicating the messages but it works so we don't really care.
-        val ids = ObjectSet<String>()
-        val ips = ObjectSet<String>()
-        val names = ObjectSet<String>()
-        for (n in traces.size - 1 downTo 0) {
-            val i = traces[n]
-            if (i.trace.ip == info.uuid || i.trace.ip == info.ip) { // Update info
-                if (i.trace.uuid != info.uuid && ids.add(i.trace.uuid)) Vars.player.sendMessage("[scarlet]${player.name} [scarlet]has changed UUID: ${i.trace.uuid} -> ${info.uuid}")
-                if (i.trace.ip != info.ip && ips.add(i.trace.ip)) Vars.player.sendMessage("[scarlet]${player.name} [scarlet]has changed IP: ${i.trace.ip} -> ${info.ip}")
-                if (i.name != player.name && names.add(i.name)) Vars.player.sendMessage("[scarlet]${player.name} [scarlet]has changed name, was previously: ${i.name}")
+        if (!Server.corium()) { // This doesn't work on corium for now
+            // These next three lines are the laziest way of deduplicating the messages, but it works so we don't really care.
+            val ids = ObjectSet<String>()
+            val ips = ObjectSet<String>()
+            val names = ObjectSet<String>()
+            for (n in traces.size - 1 downTo 0) {
+                val i = traces[n]
+                if (i.trace.ip == info.uuid || i.trace.ip == info.ip) { // Update info
+                    if (i.trace.uuid != info.uuid && ids.add(i.trace.uuid)) Vars.player.sendMessage("[scarlet]${player.name} [scarlet]has changed UUID: ${i.trace.uuid} -> ${info.uuid}")
+                    if (i.trace.ip != info.ip && ips.add(i.trace.ip)) Vars.player.sendMessage("[scarlet]${player.name} [scarlet]has changed IP: ${i.trace.ip} -> ${info.ip}")
+                    if (i.name != player.name && names.add(i.name)) Vars.player.sendMessage("[scarlet]${player.name} [scarlet]has changed name, was previously: ${i.name}")
+                }
             }
         }
 

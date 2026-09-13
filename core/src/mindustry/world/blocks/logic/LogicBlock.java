@@ -103,7 +103,11 @@ public class LogicBlock extends Block{
             int x = lbuild.tileX(), y = lbuild.tileY();
             int oldSize = entity.links.size;
 
-            entity.links.removeAll(l -> world.build(l.x, l.y) == lbuild);
+            entity.links.removeAll(l -> {
+                boolean remove = world.build(l.x, l.y) == lbuild;
+                if(remove) l.trySet(entity.executor, null);
+                return remove;
+            });
 
             if(oldSize > entity.links.size){ //check whether any were removed
                 //re-enable the target when unlinking
@@ -111,10 +115,12 @@ public class LogicBlock extends Block{
                     lbuild.enabled = true;
                 }
             }else{
-                entity.links.add(new LogicLink(x, y, entity.findLinkName(lbuild.block), true));
+                LogicLink link = new LogicLink(x, y, entity.findLinkName(lbuild.block), true);
+                link.trySet(entity.executor, lbuild);
+                entity.links.add(link);
             }
 
-            entity.updateCode(entity.code, true, null);
+            entity.updateLinks();
         });
     }
 
@@ -134,7 +140,7 @@ public class LogicBlock extends Block{
 
     public static String getLinkName(Block block){
         String name = block.name;
-        if(name.contains("-")){
+        if(name.indexOf('-') != -1){
             String[] split = name.split("-");
             //filter out 'large' at the end of block names
             if(split.length >= 2 && (split[split.length - 1].equals("large") || Strings.canParseFloat(split[split.length - 1]))){
@@ -263,18 +269,10 @@ public class LogicBlock extends Block{
 
         public void trySet(LExecutor exec, Object value){
             if(logicVar != null){
-                logicVar.setconst(value);
+                logicVar.setlink(value);
             }else{
-                var foundVar = exec.optionalVar(name);
-                if(foundVar != null){
-                    if(value != null){
-                        //should now become const as it is now a valid link
-                        //note: this will never become non-const even if invalidated
-                        //there isn't really a good reason to use these variables anyway, and it is an edge case
-                        foundVar.constant = true;
-                    }
-                    foundVar.setconst(value);
-                }
+                logicVar = exec.optionalVar(name);
+                if(logicVar != null) logicVar.setlink(value);
             }
         }
 
@@ -292,7 +290,7 @@ public class LogicBlock extends Block{
         public @Nullable ObjectIntMap<String> linkMap;
         public boolean checkedDuplicates = false;
         public boolean isVirus = false;
-        //dynamic only for privileged processors
+
         public int ipt = instructionsPerTick;
         /** Display name, for convenience. This is currently only available for world processors. */
         public @Nullable String tag;
@@ -513,11 +511,7 @@ public class LogicBlock extends Block{
 
         @Override
         public void updateTile(){
-            //load up code from read()
-            if(loadBlock != null){
-                loadBlock.run();
-                loadBlock = null;
-            }
+            checkReadCode();
 
             executor.team = team;
 
@@ -559,7 +553,9 @@ public class LogicBlock extends Block{
 
                         if(valid){
 
-                            if(lastBlock != null && cur.block != lastBlock){
+                            if((lastBlock != null && cur.block != lastBlock) ||
+                                //links don't store the type of block they used to be in saves, so when a link becomes valid, the only way to make sure the name is correct is an expensive string startsWith check
+                                (lastBlock == null && !l.name.startsWith(getLinkName(cur.block)))){
                                 l.logicVar = null; //name was reassigned because block type changed, the old cached logic var is no longer relevant
                                 l.name = "";
                                 l.name = findLinkName(cur.block);
@@ -585,10 +581,6 @@ public class LogicBlock extends Block{
 
             if(changed){
                 updateLinks();
-            }
-
-            if(!privileged){
-                ipt = instructionsPerTick;
             }
 
             if(state.rules.disableWorldProcessors && privileged) return;
@@ -840,63 +832,65 @@ public class LogicBlock extends Block{
         public void buildConfiguration(Table table){
             table.button(Icon.pencil, Styles.cleari, this::showEditDialog).size(40);
 
-            // FINISHME: bundle
-            table.button(Icon.refresh, Styles.cleari, () -> {
-                var original = code;
-                ClientVars.configs.add(() -> { // Cursed, enqueues a config now, when that one is run it enqueues a second config.
-                    new ConfigRequest(this, compress("end\n" + code, relativeConnections())).run();
-                    Timer.schedule(() -> ClientVars.configs.add(new ConfigRequest(this, LogicBlock.compress(original, relativeConnections()))), net.client() ? netClient.getPing()/1000f : 0);
-                });
-            }).size(40).tooltip("Restart code execution").disabled(b -> !ClientVars.configs.isEmpty());
-
-            table.button(Icon.copy, Styles.cleari, () ->{
-                Core.app.setClipboardText(this.code);
-            }).tooltip("@schematic.copy").size(40);
-            table.button(Icon.download, Styles.cleari, () ->{
-                String configcode = Core.app.getClipboardText().replace("\r\n", "\n");
-                this.code = configcode;
-                this.updateCode(configcode);
-                Call.tileConfig(Vars.player, this, this.config());
-            }).tooltip("@schematic.copy.import").size(40);
-            table.row();
-            table.button(Icon.trash, Styles.cleari, () -> {
-                if(Core.input.shift()) removeCode();
-                else ui.showConfirm("@confirm", "Are you sure you want to delete this processor's code?", this::removeCode);
-            }).size(40).tooltip("Remove code").disabled(b -> !accessible() || !ClientVars.configs.isEmpty());
-
-            table.button(Icon.eyeOff, Styles.cleari, () -> {
-                if(Core.input.shift()) removeLinks();
-                else ui.showConfirm("@confirm", "Are you sure you want to remove all links?", this::removeLinks);
-            }).size(40).tooltip("Remove all links").disabled(b -> !accessible() || !ClientVars.configs.isEmpty());
-
-            table.button(Icon.tree, Styles.cleari, () -> {
-                if(Core.input.shift()){
-                    importFromClipboard();
-                    new Toast(2).add("@client.processorimported");
-                    return;
-                }
-                BaseDialog dialog = new BaseDialog("@editor.export");
-                dialog.cont.pane(p -> {
-                    p.margin(10f);
-                    p.table(Tex.button, t -> {
-                        TextButtonStyle style = Styles.flatt;
-                        t.defaults().size(280f, 60f).left();
-
-                        t.button("@copy.clipboard", Icon.copy, style, () -> {
-                            dialog.hide();
-                            Core.app.setClipboardText(code);
-                        }).marginLeft(12f);
-                        t.row();
-                        t.button("@load.clipboard", Icon.download, style, () -> {
-                            dialog.hide();
-                            importFromClipboard();
-                        }).marginLeft(12f);
+            if(Core.settings.getBool("processorextrabuttons", true)){
+                // FINISHME: bundle
+                table.button(Icon.refresh, Styles.cleari, () -> {
+                    var original = code;
+                    ClientVars.configs.add(() -> { // Cursed, enqueues a config now, when that one is run it enqueues a second config.
+                        new ConfigRequest(this, compress("end\n" + code, relativeConnections())).run();
+                        Timer.schedule(() -> ClientVars.configs.add(new ConfigRequest(this, LogicBlock.compress(original, relativeConnections()))), net.client() ? netClient.getPing()/1000f : 0);
                     });
-                });
+                }).size(40).tooltip("Restart code execution").disabled(b -> !ClientVars.configs.isEmpty());
+                table.button(Icon.copy, Styles.cleari, () ->{
+                    Core.app.setClipboardText(this.code);
+                }).tooltip("@schematic.copy").size(40);
+                table.button(Icon.download, Styles.cleari, () ->{
+                    String configcode = Core.app.getClipboardText().replace("\r\n", "\n");
+                    this.code = configcode;
+                    this.updateCode(configcode);
+                    Call.tileConfig(Vars.player, this, this.config());
+                }).tooltip("@schematic.copy.import").size(40);
+                table.row();
+                table.button(Icon.trash, Styles.cleari, () -> {
+                    if(Core.input.shift()) removeCode();
+                    else ui.showConfirm("@confirm", "Are you sure you want to delete this processor's code?", this::removeCode);
+                }).size(40).tooltip("Remove code").disabled(b -> !accessible() || !ClientVars.configs.isEmpty());
 
-                dialog.addCloseButton();
-                dialog.show();
-            }).size(40).tooltip("Copy/paste Code").disabled(b -> !accessible());
+                table.button(Icon.eyeOff, Styles.cleari, () -> {
+                    if(Core.input.shift()) removeLinks();
+                    else ui.showConfirm("@confirm", "Are you sure you want to remove all links?", this::removeLinks);
+                }).size(40).tooltip("Remove all links").disabled(b -> !accessible() || !ClientVars.configs.isEmpty());
+
+                table.button(Icon.tree, Styles.cleari, () -> {
+                    if(Core.input.shift()){
+                        importFromClipboard();
+                        new Toast(2).add("@client.processorimported");
+                        return;
+                    }
+                    BaseDialog dialog = new BaseDialog("@editor.export");
+                    dialog.cont.pane(p -> {
+                        p.margin(10f);
+                        p.table(Tex.button, t -> {
+                            TextButtonStyle style = Styles.flatt;
+                            t.defaults().size(280f, 60f).left();
+
+                            t.button("@copy.clipboard", Icon.copy, style, () -> {
+                                dialog.hide();
+                                Core.app.setClipboardText(code);
+                            }).marginLeft(12f);
+                            t.row();
+                            t.button("@load.clipboard", Icon.download, style, () -> {
+                                dialog.hide();
+                                importFromClipboard();
+                            }).marginLeft(12f);
+                        });
+                    });
+
+                    dialog.addCloseButton();
+                    dialog.show();
+                }).size(40).tooltip("Copy/paste Code").disabled(b -> !accessible());
+            }
+
         }
 
         public void showEditDialog(){
@@ -949,7 +943,7 @@ public class LogicBlock extends Block{
 
         @Override
         public byte version(){
-            return 4;
+            return 5;
         }
 
         @Override
@@ -991,6 +985,8 @@ public class LogicBlock extends Block{
 
             if(privileged){
                 write.s(Mathf.clamp(ipt, 1, maxInstructionsPerTick));
+            }else{
+                write.s(ipt == instructionsPerTick ? 0 : Mathf.clamp(ipt, 1, instructionsPerTick));
             }
 
             TypeIO.writeString(write, tag);
@@ -1012,6 +1008,18 @@ public class LogicBlock extends Block{
             }
 
             write.f(accumulator);
+        }
+
+        public void checkReadCode(){
+            if(loadBlock != null){
+                loadBlock.run();
+                loadBlock = null;
+            }
+        }
+
+        @Override
+        public void afterReadAll(){
+            checkReadCode();
         }
 
         @Override
@@ -1039,14 +1047,11 @@ public class LogicBlock extends Block{
             Object[] values = new Object[varcount];
 
             for(int i = 0; i < varcount; i++){
-                try{
-                    String name = read.str();
-                    Object value = TypeIO.readObjectBoxed(read, true);
-                    names[i] = name;
-                    values[i] = value;
-                } catch (Exception ignored) {
-                    Log.err("Ошибка линков процессоров?", ignored);
-                }
+                String name = read.str();
+                Object value = TypeIO.readObjectBoxed(read, true);
+
+                names[i] = name;
+                values[i] = value;
             }
 
             int memory = read.i();
@@ -1055,6 +1060,13 @@ public class LogicBlock extends Block{
 
             if(privileged && revision >= 2){
                 ipt = Mathf.clamp(read.s(), 1, maxInstructionsPerTick);
+            }
+
+            if(!privileged && revision >= 5){
+                short iptR = read.s();
+                if(iptR != 0){
+                    ipt = Mathf.clamp(iptR, 1, instructionsPerTick);
+                }
             }
 
             if(revision >= 3){

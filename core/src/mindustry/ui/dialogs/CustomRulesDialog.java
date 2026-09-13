@@ -124,18 +124,15 @@ public class CustomRulesDialog extends BaseDialog{
     void setup(){
         cont.clear();
         cont.table(t -> {
-            t.add("@search").padRight(10);
+            t.image(Icon.zoom).padRight(8);
             var field = t.field(ruleSearch, text -> {
                 ruleSearch = text.trim().replaceAll(" +", " ").toLowerCase();
                 setupMain();
-            }).grow().pad(8).get();
+            }).growX().pad(8).get();
+            field.setMessageText("@players.search");
             field.setCursorPosition(ruleSearch.length());
             Core.scene.setKeyboardFocus(field);
-            t.button(Icon.cancel, Styles.emptyi, () -> {
-                ruleSearch = "";
-                setupMain();
-            }).padLeft(10f).size(35f);
-        }).row();
+        }).fillX().row();
         Cell<ScrollPane> paneCell = cont.pane(m -> main = m);
 
         setupMain();
@@ -148,6 +145,7 @@ public class CustomRulesDialog extends BaseDialog{
         main.clear();
         main.left().defaults().fillX().left();
         main.row();
+        main.marginRight(25f);
 
         category("waves");
         check("@rules.waves", b -> rules.waves = b, () -> rules.waves);
@@ -165,6 +163,7 @@ public class CustomRulesDialog extends BaseDialog{
         category("resourcesbuilding");
         check("@rules.alloweditworldprocessors", b -> rules.allowEditWorldProcessors = b, () -> rules.allowEditWorldProcessors);
         check("@rules.infiniteresources", b -> rules.infiniteResources = b, () -> rules.infiniteResources);
+        check("@rules.corebuildandconfig", b -> rules.coreBuildAndConfig = b, () -> rules.coreBuildAndConfig);
         check("@rules.onlydepositcore", b -> rules.onlyDepositCore = b, () -> rules.onlyDepositCore);
         check("@rules.coreunloaders", b -> rules.allowCoreUnloaders = b, () -> rules.allowCoreUnloaders);
         check("@rules.derelictrepair", b -> rules.derelictRepair = b, () -> rules.derelictRepair);
@@ -181,7 +180,7 @@ public class CustomRulesDialog extends BaseDialog{
         number("@rules.blockdamagemultiplier", f -> rules.blockDamageMultiplier = f, () -> rules.blockDamageMultiplier);
 
         if(Core.bundle.get("configure").toLowerCase().contains(ruleSearch)){
-            current.button("@configure",
+            current.button("@configure", Icon.boxSmall,
                 () -> loadoutDialog.show(999999, rules.loadout,
                     i -> true,
                     () -> rules.loadout.clear().add(new ItemStack(Items.copper, 100)),
@@ -190,7 +189,7 @@ public class CustomRulesDialog extends BaseDialog{
         }
 
         if(Core.bundle.get("bannedblocks").toLowerCase().contains(ruleSearch)){
-            current.button("@bannedblocks", () -> bannedBlocks.show(rules.bannedBlocks)).left().width(300f).row();
+            current.button("@bannedblocks", Icon.cancelSmall, () -> bannedBlocks.show(rules.bannedBlocks)).left().width(300f).row();
         }
         check("@rules.hidebannedblocks", b -> rules.hideBannedBlocks = b, () -> rules.hideBannedBlocks);
         check("@bannedblocks.whitelist", b -> rules.blockWhitelist = b, () -> rules.blockWhitelist);
@@ -213,7 +212,7 @@ public class CustomRulesDialog extends BaseDialog{
         check("@rules.logicunitdeconstruct", b -> rules.logicUnitDeconstruct = b, () -> rules.logicUnitDeconstruct, () -> rules.logicUnitControl);
 
         if(Core.bundle.get("bannedunits").toLowerCase().contains(ruleSearch)){
-            current.button("@bannedunits", () -> bannedUnits.show(rules.bannedUnits)).left().width(300f).row();
+            current.button("@bannedunits", Icon.unitsSmall, () -> bannedUnits.show(rules.bannedUnits)).left().width(300f).row();
         }
         check("@bannedunits.whitelist", b -> rules.unitWhitelist = b, () -> rules.unitWhitelist);
 
@@ -239,6 +238,11 @@ public class CustomRulesDialog extends BaseDialog{
 
         number("@rules.solarmultiplier", f -> rules.solarMultiplier = f, () -> rules.solarMultiplier);
 
+        if(Core.bundle.get("rules.weather").toLowerCase().contains(ruleSearch)){
+            current.button("@rules.weather", Icon.rainSmall, this::weatherDialog).width(250f).left().row();
+        }
+
+        category("light");
         if(Core.bundle.get("rules.ambientlight").toLowerCase().contains(ruleSearch)){
             current.button(b -> {
                 b.left();
@@ -250,14 +254,11 @@ public class CustomRulesDialog extends BaseDialog{
                 b.add("@rules.ambientlight");
             }, () -> ui.picker.show(rules.ambientLight, rules.ambientLight::set)).left().width(250f).row();
         }
-
-        if(Core.bundle.get("rules.weather").toLowerCase().contains(ruleSearch)){
-            current.button("@rules.weather", this::weatherDialog).width(250f).left().row();
-        }
+        check("@rules.lighting.unitlight", b -> rules.unitLight = b, () -> rules.unitLight);
 
         category("music");
 
-        Boolp allowMusic = () -> !state.rules.disableMusic;
+        Boolp allowMusic = () -> !rules.disableMusic;
         Func<String, Seq<MusicContainer>> parser = str -> {
             try{
                 return Seq.map(new JsonReader().parse("[" + str + "]").asStringArray(), MusicContainer::new);
@@ -270,13 +271,13 @@ public class CustomRulesDialog extends BaseDialog{
         check("@rules.nomusic", b -> rules.disableMusic = b, () -> rules.disableMusic);
 
         text("@rules.ambientmusic",
-            s -> state.rules.ambientMusic = s.trim().isEmpty() ? null : parser.get(s),
+            s -> rules.ambientMusic = s.trim().isEmpty() ? null : parser.get(s),
             () -> rules.ambientMusic == null ? "" : rules.ambientMusic.toString(", "),
             text -> parser.get(text) != null,
         allowMusic);
 
         text("@rules.darkmusic",
-            s -> state.rules.darkMusic = s.trim().isEmpty() ? null : parser.get(s),
+            s -> rules.darkMusic = s.trim().isEmpty() ? null : parser.get(s),
             () -> rules.darkMusic == null ? "" : rules.darkMusic.toString(", "),
             text -> parser.get(text) != null,
         allowMusic);

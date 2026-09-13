@@ -39,7 +39,7 @@ public class StatusEffect extends UnlockableContent{
     public float intervalDamage;
     /** If true, interval damage is armor piercing. */
     public boolean intervalDamagePierce = false;
-    /** Chance of effect appearing. */
+    /** Chance of visual effect(s) appearing. */
     public float effectChance = 0.15f;
     /** Should the effect be given a parent. */
     public boolean parentizeEffect;
@@ -236,7 +236,7 @@ public class StatusEffect extends UnlockableContent{
         super.createIcons(packer);
 
         if(outline){
-            makeOutline(PageType.ui, packer, uiIcon, true, Pal.gray, 3);
+            makeOutline(PageType.ui, packer, uiIcon, false, Pal.gray, 3);
         }
     }
 

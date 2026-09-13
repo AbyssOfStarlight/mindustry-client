@@ -16,6 +16,7 @@ import arc.util.serialization.*;
 import arc.util.serialization.Jval.*;
 import kotlin.*;
 import mindustry.*;
+import mindustry.ai.*;
 import mindustry.client.*;
 import mindustry.client.utils.*;
 import mindustry.core.*;
@@ -42,6 +43,9 @@ public class Mods implements Loadable{
     "ui-lib", "braindustry", "schema", "scheme-size:1.0.5", "scheme-size:1.0.4", "scheme-size:1.0.3", "scheme-size:1.0.1", "scheme-size:1.0.0", "scheme-size:1.1.0", "scheme-size:1.0.4.1",
     //new patch API as of build 159 breaks older versions of the patch editor
     "patch-editor:1.10.1", "patch-editor:1.10.0", "patch-editor:1.9.5", "patch-editor:1.9.4", "patch-editor:1.9.3"
+    );
+    private static final ObjectSet<String> blacklistedRepos = ObjectSet.with(
+    "anthropiccom/lithium4mindustry"
     );
 
     private Json json = new Json();
@@ -146,6 +150,7 @@ public class Mods implements Loadable{
             lastOrderedMods = null;
             requiresReload = true;
             //enable the mod on import
+            Core.settings.put("mod-" + loaded.name + "-failed", false);
             if(forceEnable) Core.settings.put("mod-" + loaded.name + "-enabled", true);
             sortMods();
             //try to load the mod's icon so it displays on import
@@ -962,15 +967,20 @@ public class Mods implements Loadable{
                 Fi contentRoot = mod.root.child("content");
                 for(ContentType type : ContentType.all){
                     String lower = type.name().toLowerCase(Locale.ROOT);
-                    Fi folder = contentRoot.child(lower + (lower.endsWith("s") ? "" : "s"));
-                    if(folder.exists()){
-                        for(Fi file : folder.findAll(f -> f.extension().equals("json") || f.extension().equals("hjson"))){
+                    //search both the proper folder name (e.g. "weather", "statuses") and the old nonsensical folder names ("weathers", "status")
+                    String oldName = lower + (lower.endsWith("s") ? "" : "s");
+                    Fi[] folders = {oldName.equals(type.folderName) ? null : contentRoot.child(oldName), contentRoot.child(type.folderName)};
 
-                            //if this is part of the ordered content, put it aside to be dealt with later
-                            if(orderSet != null && orderSet.contains(file.nameWithoutExtension())){
-                                orderedContent.put(file.nameWithoutExtension(), new LoadRun(type, file, mod));
-                            }else{
-                                unorderedContent.add(new LoadRun(type, file, mod));
+                    for(Fi folder : folders){
+                        if(folder != null && folder.exists()){
+                            for(Fi file : folder.findAll(f -> f.extEquals("json") || f.extEquals("hjson"))){
+
+                                //if this is part of the ordered content, put it aside to be dealt with later
+                                if(orderSet != null && orderSet.contains(file.nameWithoutExtension())){
+                                    orderedContent.put(file.nameWithoutExtension(), new LoadRun(type, file, mod));
+                                }else{
+                                    unorderedContent.add(new LoadRun(type, file, mod));
+                                }
                             }
                         }
                     }
@@ -1012,6 +1022,8 @@ public class Mods implements Loadable{
         //this finishes parsing content fields
         parser.finishParsing();
 
+        UnitStance.loadAfterMods();
+
         Events.fire(new ModContentLoadEvent());
     }
 
@@ -1033,6 +1045,7 @@ public class Mods implements Loadable{
     public void setEnabled(LoadedMod mod, boolean enabled){
         if(mod.enabled() != enabled){
             Core.settings.put("mod-" + mod.name + "-enabled", enabled);
+            Core.settings.put("mod-" + mod.name + "-failed", false);
             requiresReload = true;
             mod.state = enabled ? ModState.enabled : ModState.disabled;
             mods.each(this::updateDependencies);
@@ -1301,7 +1314,9 @@ public class Mods implements Loadable{
 
             //skip mod loading if it failed
             if(skipModLoading()){
+                boolean wasEnabled = Core.settings.getBool("mod-" + baseName + "-enabled", true);
                 Core.settings.put("mod-" + baseName + "-enabled", false);
+                Core.settings.put("mod-" + baseName + "-failed", wasEnabled);
             }
 
             var duration = Time.elapsed();
@@ -1390,6 +1405,10 @@ public class Mods implements Loadable{
 
         public boolean shouldBeEnabled(){
             return Core.settings.getBool("mod-" + name + "-enabled", true);
+        }
+
+        public boolean failed(){
+            return Core.settings.getBool("mod-" + name + "-failed", false);
         }
 
         public boolean hasUnmetDependencies(){
@@ -1545,7 +1564,7 @@ public class Mods implements Loadable{
 
         /** Some mods are known to cause issues with the game; this detects and returns whether a mod is manually blacklisted. */
         public boolean isBlacklisted(){
-            return blacklistedMods.contains(name) || blacklistedMods.contains(name + ":" + version);
+            return blacklistedMods.contains(name) || blacklistedMods.contains(name + ":" + version) || (repo != null && blacklistedRepos.contains(repo));
         }
 
         public String shortDescription(){

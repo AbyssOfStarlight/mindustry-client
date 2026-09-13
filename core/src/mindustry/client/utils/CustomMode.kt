@@ -17,7 +17,7 @@ enum class CustomMode(
 ) {
     none,
     flood {
-        val floodCompatRepo = "mindustry-antigrief/FloodCompat"
+        val floodCompatRepo = "CoriumMindustry/FloodCompat"
         var hasLoaded = false
 
         override fun enable() {
@@ -35,9 +35,9 @@ enum class CustomMode(
                     floodMod!!.dispose()
                     Core.settings.put("mod-floodcompat-enabled", true) // Has to be enabled for the mod to load
                     val mod = Reflect.invoke<Mods.LoadedMod>(mods, "loadMod", arrayOf(floodMod!!.file), Fi::class.java) // Load the mod and call the init() function
-                    mod.main.init()
                     mods.buildFiles(mod)
                     mods.loadBundles()
+                    mod.main.init()
                     // Next 5 lines sort the new mod as if it were enabled without actually keeping it enabled after a restart
                     mod.state = Mods.ModState.enabled
                     mods.mods.add(mod)
@@ -93,7 +93,8 @@ enum class CustomMode(
 
         init {
             Events.on(WorldLoadEvent::class.java) {
-                val modeName = if (!net.client() || ui.join.lastHost?.modeName?.isBlank() != false) state.rules.modeName?.lowercase() else ui.join.lastHost.modeName.lowercase()
+                var modeName = if (!net.client() || ui.join.lastHost?.modeName?.isBlank() != false) state.rules.modeName?.lowercase() else ui.join.lastHost.modeName.lowercase()
+                if (modeName == "flood pvp") modeName = "flood" // lazy way to support floodpvp
                 current = entries.find { (it.modeName ?: it.name) == modeName } ?: none // If modeName (or just the enum name if modeName is unspecified) matches, setup this mode
             }
 
