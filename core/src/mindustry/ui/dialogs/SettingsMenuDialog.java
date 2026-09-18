@@ -573,14 +573,23 @@ public class SettingsMenuDialog extends BaseDialog{
         client.checkPref("alarmgriefblocks", false);
         client.sliderPref("alarmgriefblocksbuild", 10, 0, 500, 1, String::valueOf);
         client.sliderPref("alarmgriefblocksbreake", 100, 0, 500, 1, String::valueOf);
+        client.checkPref("plastaniumautobridge", true);
+        client.checkPref("autobridgephasenodes", true);
+        client.checkPref("autobridgereplacenodes", true);
 
         if(Core.settings.getBool("OneLoliToRuleThemAll", false)) {
             client.category("FD_LOLI");
             client.updateUuid();
             client.textPref("uchatcolor", "");
-            client.textPref("uchatgradientstart", "");
-            client.textPref("uchatgradientend", "");
+            client.colorTextPref("uchatgradientstart", "00ffea");
+            client.colorTextPref("uchatgradientend", "ffffff");
             client.sliderPref("uchatgradientstep", 3, 1, 10, 1, String::valueOf);
+            client.sliderPref("uchatgradientrnd", 0, 0, 3, i -> {
+                if(i == 0) return "Выкл";
+                if(i == 1) return "Полный рандом";
+                if(i == 2) return "Только яркие";
+                return "Гармоничные"; // Красивые неоновые/дизайнерские переходы
+            });
             client.sliderPref("uchatmode", 0, 0, 4, i -> {
                 if(i == 0) return "Выкл";
                 if(i == 1) return "Обычный";
@@ -588,7 +597,6 @@ public class SettingsMenuDialog extends BaseDialog{
                 if(i == 3) return "Радуга";
                 return "Оптимизированный Красный";
             });
-            client.textPref("mynickshifter", "");
             client.addGradientNicknameGenerator();
         }
 
@@ -1307,6 +1315,55 @@ public class SettingsMenuDialog extends BaseDialog{
             }
 
             return sb.toString();
+        }
+
+        public void colorTextPref(String name, String def){
+            settings.defaults(name, def);
+            pref(new Setting(name) {
+                Color currentColor = new Color();
+
+                @Override
+                public void add(SettingsTable table) {
+                    table.table(t -> {
+                        t.left();
+                        // 1. Название настройки
+                        t.add(title).padRight(10);
+
+                        // 2. Текстовое поле ввода HEX
+                        TextField field = t.field(settings.getString(name, def), text -> {
+                            settings.put(name, text);
+                        }).width(200).get();
+
+                        // 3. Кнопка с визуальной палитрой справа
+                        ImageButton pickerBtn = t.button(Icon.fill, () -> {
+                            Vars.ui.picker.show(currentColor, res -> {
+                                String hex = res.toString().substring(0, 6);
+                                settings.put(name, hex);
+                                field.setText(hex);
+                            });
+                        }).size(40).padLeft(8).tooltip("Выбрать цвет").get();
+
+                        // Автоматически синхронизируем UI с Core.settings
+                        t.update(() -> {
+                            String currentHex = settings.getString(name, def);
+
+                            // Обновляем текст в поле, только если игрок сейчас сам в него не пишет
+                            if(!field.hasKeyboard() && !field.getText().equalsIgnoreCase(currentHex)){
+                                field.setText(currentHex);
+                            }
+
+                            // Обновляем цвет иконки палитры
+                            try {
+                                currentColor.set(Color.valueOf(currentHex));
+                            } catch (Exception ignored) {}
+
+                            pickerBtn.getStyle().imageUpColor = currentColor;
+                        });
+
+                    }).left().expandX().padTop(3).padBottom(3);
+                    table.row();
+                }
+            });
         }
 
         private void updateUuid() {

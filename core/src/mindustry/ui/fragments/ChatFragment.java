@@ -482,6 +482,9 @@ public class ChatFragment extends Table{
 
         if (chatMode > 0 && mode == ChatMode.normal && !isCommand) {
             message = applyChatStyle(message, chatMode);
+            if (chatMode == 2) {
+                randomizeGradientColors();
+            }
         }
 
         if (message.length() > CHAT_CHUNK_LIMIT || (chatMode > 0 && !isCommand)) {
@@ -489,6 +492,49 @@ public class ChatFragment extends Table{
         } else {
             handleClientCommand(message);
         }
+    }
+
+    public static void randomizeGradientColors() {
+        int rndMode = Core.settings.getInt("uchatgradientrnd", 0);
+        if (rndMode == 0) return;
+
+        Color c1 = new Color();
+        Color c2 = new Color();
+
+        if (rndMode == 1) {
+            // 1. Полный рандом (любые оттенки и яркость)
+            c1.set(Mathf.random(), Mathf.random(), Mathf.random(), 1f);
+            c2.set(Mathf.random(), Mathf.random(), Mathf.random(), 1f);
+
+        } else if (rndMode == 2) {
+            // 2. Только яркие (но цвета между собой не согласованы)
+            c1.fromHsv(Mathf.random(360f), Mathf.random(0.75f, 1f), Mathf.random(0.85f, 1f));
+            c2.fromHsv(Mathf.random(360f), Mathf.random(0.75f, 1f), Mathf.random(0.85f, 1f));
+
+        } else if (rndMode == 3) {
+            // 3. Гармоничные градиенты (Цветовая теория: Analogous / Split-Complementary)
+            float baseHue = Mathf.random(360f);
+
+            // Сдвиг оттенка: выбираем либо плавный переход (50-80°), либо неоновый закатный (100-135°)
+            float hueShift = Mathf.randomBoolean() ? Mathf.random(50f, 85f) : Mathf.random(105f, 135f);
+
+            // Случайное направление по цветовому кругу (по часовой или против)
+            if (Mathf.randomBoolean()) hueShift = -hueShift;
+
+            float endHue = (baseHue + hueShift + 360f) % 360f;
+
+            // Насыщенность и яркость держим в «сочном» диапазоне
+            float sat1 = Mathf.random(0.8f, 1f);
+            float sat2 = Mathf.random(0.75f, 0.95f);
+            float val1 = Mathf.random(0.9f, 1f);
+            float val2 = Mathf.random(0.9f, 1f);
+
+            c1.fromHsv(baseHue, sat1, val1);
+            c2.fromHsv(endHue, sat2, val2);
+        }
+
+        Core.settings.put("uchatgradientstart", c1.toString().substring(0, 6));
+        Core.settings.put("uchatgradientend", c2.toString().substring(0, 6));
     }
 
     private String applyChatStyle(String msg, int mode) {
