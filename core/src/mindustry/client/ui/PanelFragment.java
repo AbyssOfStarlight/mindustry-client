@@ -103,7 +103,7 @@ public class PanelFragment extends Table{
 
     String temp_name = Core.settings.getString("mynickshifter", "nani");
     public static boolean polyAiMode = Core.settings.getBool("polyAiMode", false);
-    public static final BuilderAI aiNotPolyAi = new BuilderAI();
+    public static final SelfBuilderAI aiNotPolyAi = new SelfBuilderAI();
 
 
 
@@ -485,10 +485,18 @@ public class PanelFragment extends Table{
                     FDAutoShoot.viewUnitAim = !FDAutoShoot.viewUnitAim;
                 }).update(i -> i.setChecked(FDAutoShoot.viewUnitAim)).name("vaim").tooltip("Player Unit Range & Real Aim");
 
-                t.button(Icon.commandRallySmall, sstylet, () -> {
+                var btn = t.button(Icon.commandRallySmall, sstylet, () -> {
                     polyAiMode = !polyAiMode;
                     Core.settings.put("polyAiMode", polyAiMode);
-                }).update(i -> i.setChecked(polyAiMode)).name("polyAiMode").tooltip("polyAiMode");
+                }).update(i -> i.setChecked(polyAiMode)).name("polyAiMode").tooltip("polyAiMode (ПКМ - Настройки)").get();
+
+                // Открытие настроек на ПКМ
+                btn.addListener(new arc.scene.event.ClickListener(arc.input.KeyCode.mouseRight){
+                    @Override
+                    public void clicked(arc.scene.event.InputEvent event, float x, float y){
+                        PolySettingsDialog.instance.show();
+                    }
+                });
 
                 t.row();
 
